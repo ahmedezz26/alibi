@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "langsmith": {
+      "type": "http",
+      "url": "https://api.smith.langchain.com/mcp"
+    },
+    "hugging-face": {
+      "type": "http",
+      "url": "https://huggingface.co/mcp"
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "alphaxiv": {
+      "type": "http",
+      "url": "https://api.alphaxiv.org/mcp/v1"
+    }
+  }
+}

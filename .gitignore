@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local secrets
+.env
+
+# Downloaded datasets (AgentRx is gated; do not commit)
+data/
+
+# Evaluation outputs
+runs/

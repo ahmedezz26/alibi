@@ -1,0 +1,35 @@
+[project]
+name = "alibi"
+version = "0.1.0"
+description = "Agent-trace triage via state estimation over windowed judge-model calls"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain-typesafe>=0.0.1a2",
+    "langsmith>=0.12.6",
+    "numpy>=2.5.3",
+    "openai>=3.16.0",
+    "pyarrow>=25.0.1",
+    "python-dotenv>=1.2.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[project.scripts]
+alibi = "alibi.cli:main"
