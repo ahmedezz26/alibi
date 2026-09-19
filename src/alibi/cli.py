@@ -119,7 +119,20 @@ def main(argv: list[str] | None = None) -> int:
     dl = sub.add_parser("download-agentrx", help="fetch the gated dataset using HF_TOKEN")
     dl.add_argument("--data-dir", default="data/agentrx")
 
+    diag = sub.add_parser(
+        "diagnose", help="V2 + Jev: the 3 steps of a long agent trace to read first"
+    )
+    diag.add_argument("trace", help="path to a .json / Claude Code .jsonl trace, or a LangSmith id")
+    diag.add_argument(
+        "--source", choices=["auto", "json", "claude-code", "langsmith"], default="auto"
+    )
+    diag.add_argument("--project", help="LangSmith project name")
+    diag.add_argument("--min-tokens", type=int, help="override the length gate")
+    diag.add_argument("--json", action="store_true", help="print the Diagnosis as JSON")
+
     args = parser.parse_args(argv)
+    if args.command == "diagnose":
+        return _diagnose(args)
     if args.command in ("eval", "eval-agentrx"):
         return _eval(args)
     if args.command == "download-agentrx":
@@ -169,6 +182,46 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _diagnose(args: argparse.Namespace) -> int:
+    from dataclasses import replace
+
+    from alibi.chunking import trace_tokens
+    from alibi.localize import diagnose
+    from alibi.sources.auto import load_steps
+
+    settings = load_settings()
+    if args.min_tokens is not None:
+        settings = replace(settings, min_trace_tokens=args.min_tokens)
+    steps = load_steps(args.trace, args.source, args.project)
+    judge = None
+    if trace_tokens(steps) >= settings.min_trace_tokens:
+        if settings.judge_backend != "typesafe":
+            print(
+                "Alibi needs the Jev backend: set ALIBI_JUDGE_BACKEND=typesafe and "
+                "TYPESAFE_API_KEY",
+                file=sys.stderr,
+            )
+            return 2
+        judge = make_judge(settings)
+    d = diagnose(steps, judge, settings)
+    if args.json:
+        print(d.model_dump_json(indent=2))
+        return 0
+    print(d.message)
+    if not d.gated:
+        print(
+            f"{d.trace_tokens:,} tokens, {d.n_chapters} chapters, alarm at chapter "
+            f"{d.alarm_chapter}; {d.judge_calls} Jev calls, {d.judge_seconds:.0f} s, "
+            f"${d.cost_usd:.4f}"
+        )
+        for rank, s in enumerate(d.suspects, 1):
+            print(
+                f"{rank}. step {s.step} ({s.step_type}{' ' + s.name if s.name else ''}), "
+                f"chapter {s.chapter}, score {s.score:.3f}\n   {s.preview[:160]!r}"
+            )
+    return 0
 
 
 def _load_benchmark(args: argparse.Namespace) -> tuple[list, TraceSource]:
