@@ -57,3 +57,53 @@ def test_long_trace_returns_top_suspects_with_context():
 def test_long_trace_without_a_judge_is_an_error():
     with pytest.raises(ValueError, match="judge"):
         diagnose(steps(), judge=None, settings=settings(min_trace_tokens=0))
+
+
+class RegressionJudge:
+    """Produces a scenario where critical_step is not in the top 3 ranked.
+
+    Early chunks have high health, but suspect probabilities favor later steps.
+    This makes the top-3 ranked be later steps, while earliest_near_best still picks
+    an earlier step that has a non-zero combined score.
+    """
+
+    def __init__(self):
+        self.calls = []
+
+    def evaluate(self, state, questions):
+        out = {}
+        # Identify which steps are in the current state
+        has_early = any(f"[step {i}]" in state for i in range(4))
+
+        for q in questions:
+            if q.answer_type == "score":
+                # Early chunks score high; this will make early steps rank in top 3
+                out[q.id] = 0.95 if has_early else 0.5
+            elif q.answer_type == "choice":
+                first = next(iter(q.criteria))
+                # For suspect step probabilities: give high probability to later steps
+                # to push them into top 3. This is the "probabilities" dict.
+                # Keys should be step indices.
+                out[q.id] = {
+                    "choice": first,
+                    "probabilities": {7: 0.9, 8: 0.85, 2: 0.8},
+                    "confidence": 0.9,
+                }
+            else:
+                out[q.id] = 0.1
+        return out
+
+
+def test_critical_step_not_in_ranked_has_correct_score():
+    """Regression test: critical_step outside top-3 ranked still gets correct score.
+
+    This test verifies the fix for a bug where diagnose() would report a suspect
+    with score 0.0 if its step was picked as critical_step but was not in the
+    top-3 ranked tuple (which is truncated by backward_pass_typed).
+    """
+    d = diagnose(steps(), judge=RegressionJudge(), settings=settings(min_trace_tokens=0))
+    assert not d.gated
+    assert len(d.suspects) > 0
+    # The first suspect should have a non-zero score, even if its step is not in the
+    # truncated ranked tuple. The score should come from the full combined map.
+    assert d.suspects[0].score > 0.0, "critical_step should have correct combined score, not 0.0"

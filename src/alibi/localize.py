@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from alibi.backward import backward_pass_typed
+from alibi.backward import backward_pass_typed, combine_scores, suspect_probs
 from alibi.chunking import chunk_trace, render_step, trace_tokens
 from alibi.config import Settings
 from alibi.drift import detect_drift
@@ -86,10 +86,17 @@ def diagnose(steps: list[Step], judge: Judge | None, settings: Settings) -> Diag
         pick=V2_CONFIG["pick"],
     )
     ranked = list(loc.ranked)
+    # Recompute the full score map: loc.ranked is truncated to TOP_K=3, but critical_step may
+    # not be in it. Use combine_scores to get the authoritative score for every step.
+    combined = combine_scores(
+        loc.evidence,
+        [s.score for s in fwd],
+        [suspect_probs(s.answers) for s in fwd],
+        V2_CONFIG["rule"],
+    )
     # The pick (earliest near the top) leads, then the rest of the ranking.
     order = [loc.critical_step] + [i for i, _ in ranked if i != loc.critical_step]
-    scores = dict(ranked)
-    suspects = [_suspect(i, scores.get(i, 0.0), chunks, steps) for i in order[:3]]
+    suspects = [_suspect(i, combined.get(i, 0.0), chunks, steps) for i in order[:3]]
     calls = getattr(judge, "calls", [])
     return Diagnosis(
         gated=False,
