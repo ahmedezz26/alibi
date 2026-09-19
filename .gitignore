@@ -24,3 +24,4 @@ runs/
 
 # macOS
 .DS_Store
+dist/

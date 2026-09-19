@@ -180,10 +180,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
 def _diagnose(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
@@ -389,3 +385,7 @@ def _download_agentrx(args: argparse.Namespace) -> int:
             (data_dir / name).write_bytes(resp.content)
             print(f"{name}: {len(resp.content)} bytes", file=sys.stderr)
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

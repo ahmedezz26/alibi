@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 
 from alibi import cli
 
@@ -22,6 +24,17 @@ def test_json_output_is_a_diagnosis(tmp_path, capsys):
     assert cli.main(["diagnose", trace_file(tmp_path), "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["gated"] is True and out["suspects"] == []
+
+
+def test_module_entry_point_runs(tmp_path):
+    """`python -m alibi.cli` must define every handler before main() dispatches."""
+    out = subprocess.run(
+        [sys.executable, "-m", "alibi.cli", "diagnose", trace_file(tmp_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert out.returncode == 0, out.stderr
+    assert "direct read" in out.stdout
 
 
 def test_long_trace_needs_the_jev_backend(tmp_path, capsys, monkeypatch):
