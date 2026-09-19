@@ -1,12 +1,16 @@
 # Alibi research log
 
+_Run artifacts (`runs/*.jsonl` and the one-off scoring scripts referenced below) are kept
+locally and are not published: they embed benchmark traces whose licences differ. The numbers
+here are the outputs of those runs._
+
 _Every measurement taken while building Alibi, including the ones that failed. Pass bars were written down before each run; held-out sets were run once and never tuned on. The *why* behind the project lives in `docs/PROJECT_BRIEF.md`._
 
 ---
 
 ## 1. TL;DR — where we are
 
-- Build-order steps **1–5 are done**, and the **backward pass (§3.7) is built**. Step 6 (go/no-go validation) is **in progress**.
+- **Final state: V2 + Jev is the adopted method and is shipped** (`alibi diagnose`, the `alibi-mcp` server, the Claude Code plugin). Step 6, the go/no-go validation, passed on 2026-09-19; V3-V9 all failed their pre-registered gates and were dropped. The entries below are in the order they happened, so earlier ones record what was true at the time.
 - **AgentRx (short traces):** the windowed pipeline **loses** to a single whole-trace call. Almost every AgentRx trace is short enough for one call.
 - **Key finding:** single calls collapse on traces **over ~10K tokens** (true for both gpt-5-nano and DeepSeek). So Alibi now uses **hybrid routing**: one call for short traces, the windowed pipeline for long ones.
 - **AgenTracer long-trace pilot (30 traces, >10K tokens):** looked like a pipeline win (±3 16/30 vs 11/30, p=0.30), **but it did not hold up.**

@@ -1,5 +1,9 @@
 # Alibi
 
+[![CI](https://github.com/ahmedezz26/alibi/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedezz26/alibi/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
+
 **We check whether your agent has an alibi for what it did.**
 
 Alibi finds where a long AI-agent run went wrong. It borrows the playbook of automotive
@@ -31,6 +35,34 @@ flowchart LR
 | CUSUM | Accumulates health drift; the first alarm marks the failure chapter | Fault detection |
 | Look-back | Re-reads the alarm chapter and every earlier one in parallel, with hindsight | Fixed-interval (RTS-style) smoothing |
 | Pick | P(chapter) x evidence per step; the earliest step within 80% of the top score | Fault-onset estimation |
+
+## What you get
+
+A short trace is refused, without spending a call:
+
+    $ alibi diagnose examples/sample_trace.json
+    Trace is 219 tokens, under the 50,000-token threshold: a single direct read is
+    enough; Alibi adds value on long traces.
+
+A long one comes back as three steps to read, in order. This is a real run from the
+locked TrajErrBench set (a Claude Opus coding agent failing on a qutebrowser issue),
+replayed from its recorded result:
+
+    $ alibi diagnose trace.json
+    Read these 3 steps first, in order.
+    80,778 tokens, 10 chapters, alarm at chapter 6; 17 Jev calls, 35 s, $0.0096
+    1. step 74 (assistant), chapter 6, score 0.277
+       'Now I see the full picture. The test on line 458 expects
+        `str(proc.outcome) == 'Testprocess crashed.'` for SIGSEGV...'
+    2. step 76 (assistant), chapter 6, score 0.202
+       '## Phase 5: FIX ANALYSIS\n\nNow I have a clear understanding. Let me
+        implement the changes to `guiprocess.py`...'
+    3. step 78 (assistant), chapter 6, score 0.178
+       'Now let me implement all the changes:\nTool calls:\nstr_replace_editor(...'
+
+Step 74 is the labelled root cause: the agent reads the test wrong and every later
+edit builds on that reading. Being right at rank 1 happens on 16% of these traces;
+the honest claim is that three steps out of 118 is a much smaller haystack.
 
 ## Results
 
