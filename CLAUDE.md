@@ -4,18 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Project: Alibi — agent-trace triage. Treats a trace as a time series and windowed judge-model calls as noisy sensor readings, then applies state-estimation techniques (forward filtering, CUSUM drift detection, backward/RTS smoothing) to localize the step where an agent went wrong.
 
-**Current state (2026-09-20): research is done, productizing is next.** V2 + Jev is the adopted method; V3-V9 all failed their pre-registered gates. The active work is `docs/superpowers/plans/2026-09-20-alibi-mcp-plugin.md`: 7 TDD tasks turning V2 into an open-source MCP server + Claude Code plugin (repo `ahmedezz26/alibi`, MIT). The user chose **subagent-driven execution** (a fresh subagent per task, review between tasks). Building needs no paid calls; ~$0.03 of Jev credit remains, so do not plan paid runs.
+**Current state (2026-09-20): research is done, the product is being built.** V2 + Jev is the adopted method; V3-V9 all failed their pre-registered gates. The product surface is `alibi.localize.diagnose()`, reached through `alibi diagnose`, the `alibi-mcp` MCP server and the Claude Code plugin in `plugin/`. Building and testing need no paid calls.
 
-**Start every session by reading `docs/PROGRESS.md`.** It holds the current state, all results, data locations, budget and the next action. The project thesis, architecture rationale, data strategy and open risks are in `docs/PROJECT_BRIEF.md`; read it before any architectural decision. This file only holds what must survive every session.
+**Start every session by reading `docs/research-log.md`.** It holds every measurement, the pre-registered pass bars, data locations and the next action. The project thesis, architecture rationale, data strategy and open risks are in `docs/PROJECT_BRIEF.md`; read it before any architectural decision. This file only holds what must survive every session.
 
 ## Critical rules — do not skip
 
-- **Money:** the user pays personally and is budget-constrained. **Never run a paid model or API** without explicit approval for that specific run, plus a cost estimate. `make_judge` enforces this: it refuses non-`:free` models unless `ALIBI_ALLOW_PAID_MODELS=1`. Set that only with approval. For frontier-model references, use **published paper numbers**, don't run them.
-- **Go/no-go:** step 6 **passed on 2026-09-19** (see `docs/PROGRESS.md`), so steps 7–10 are unblocked, but agree each one with the user first. Step 6 is validation of the backward-smoothing pass with recorded precision/recall. It started on AgentRx (73 annotated failures in the public `microsoft/AgentRx` release) and continues on AgenTracer's long traces; status is in `docs/PROGRESS.md`. See `docs/PROJECT_BRIEF.md` §5 for the build order.
+- **Paid APIs:** never run a paid model without explicit approval and a cost estimate; `make_judge` refuses non-free models unless `ALIBI_ALLOW_PAID_MODELS=1`. For frontier-model references, use **published paper numbers**, don't run them.
+- **Go/no-go:** step 6 **passed on 2026-09-19** (see `docs/research-log.md`), so steps 7–10 are unblocked, but agree each one with the user first. Step 6 is validation of the backward-smoothing pass with recorded precision/recall. It started on AgentRx (73 annotated failures in the public `microsoft/AgentRx` release) and continues on AgenTracer's long traces; status is in `docs/research-log.md`. See `docs/PROJECT_BRIEF.md` §5 for the build order.
 - Tune thresholds on the AgenTracer **train** split only; report on **test**. Don't tune prompts on test or pilot traces. Don't diagnose misses on test either: find patterns on train.
 - **Locked held-out sets:** `docs/heldout_agentracer_test_ids.json` (126, used), `docs/heldout_trajerrbench_swe56_ids.json` (used) and `docs/heldout_longrca_ids.json` (LongRCA; its SWE-90 part is used, the rest unused). Run each once, for a final verdict, against a pass bar agreed in writing beforehand. Never inspect its misses or tune on it.
 - Free OpenRouter endpoints may log prompts. Use them only on public benchmarks, **never** on customer or production traces.
-- Don't commit or push unless asked. The repo is initialized but has no commits yet.
+- Don't commit or push unless asked.
 
 ## Build / test / lint
 
@@ -75,12 +75,12 @@ claude mcp add -s user --transport http github https://api.githubcopilot.com/mcp
 
 ## Progress Log
 
-Keep the detailed state in **`docs/PROGRESS.md`**: update its TL;DR, results and next steps, and append dated entries to its §8. Keep only a one-line pointer here.
+Keep the detailed state in **`docs/research-log.md`**: update its TL;DR, results and next steps, and append dated entries to its §8. Keep only a one-line pointer here.
 
-- 2026-09-18: steps 1–5 and the backward pass are built. AgentRx: the pipeline loses to a single call on short traces. AgenTracer: the 30-trace pilot win did not hold. On 120 long test traces the pipeline **loses** (±3 48% vs 56% for a single call, p=0.23). Step 6 is a no-go as built; the next step is diagnosis on train. Details are in `docs/PROGRESS.md`.
-- 2026-09-19: **Step 6 PASSED** on the locked held-out set (126 unseen long AgenTracer test traces), by the pre-agreed bar: the method + Jev (typed pipeline) got exact 33% vs 7% for a DeepSeek single call (p<0.0001), ±3 60% vs 48%, at 9 s/trace. The held-out set is now used. Steps 7+ are unblocked. Details are in `docs/PROGRESS.md`.
-- 2026-09-19: **Real-failure test PASSED** on the locked TrajErrBench SWE-Bench Pro set (56 long real coding failures): V2 (method + Jev: gap card + checks + `step_plus_check` + `earliest_near_best`) got exact 16% vs 0% for a DeepSeek single call (p=0.004), ±3 21% vs 2%. The finalist round (V3/V3b) is not adopted. Total Jev spend ≈ $2.34. Details are in `docs/PROGRESS.md`.
-- 2026-09-19: V3–V8 (finalists, sensors, blame questions, DeepSeek picker, router + commit points, look back from the end) all failed to beat V2 on dev. **LongRCA held-out (90 real SWE failures, median 120K tokens): V2 exact 7.8% vs DeepSeek whole-trace 0% (p=0.016), but below the published 13.2%, so it FAILED the pre-agreed bar.** Jev credit ≈ $0.21. Details are in `docs/PROGRESS.md`.
+- 2026-09-18: steps 1–5 and the backward pass are built. AgentRx: the pipeline loses to a single call on short traces. AgenTracer: the 30-trace pilot win did not hold. On 120 long test traces the pipeline **loses** (±3 48% vs 56% for a single call, p=0.23). Step 6 is a no-go as built; the next step is diagnosis on train. Details are in `docs/research-log.md`.
+- 2026-09-19: **Step 6 PASSED** on the locked held-out set (126 unseen long AgenTracer test traces), by the pre-agreed bar: the method + Jev (typed pipeline) got exact 33% vs 7% for a DeepSeek single call (p<0.0001), ±3 60% vs 48%, at 9 s/trace. The held-out set is now used. Steps 7+ are unblocked. Details are in `docs/research-log.md`.
+- 2026-09-19: **Real-failure test PASSED** on the locked TrajErrBench SWE-Bench Pro set (56 long real coding failures): V2 (method + Jev: gap card + checks + `step_plus_check` + `earliest_near_best`) got exact 16% vs 0% for a DeepSeek single call (p=0.004), ±3 21% vs 2%. The finalist round (V3/V3b) is not adopted. Details are in `docs/research-log.md`.
+- 2026-09-19: V3–V8 (finalists, sensors, blame questions, DeepSeek picker, router + commit points, look back from the end) all failed to beat V2 on dev. **LongRCA held-out (90 real SWE failures, median 120K tokens): V2 exact 7.8% vs DeepSeek whole-trace 0% (p=0.016), but below the published 13.2%, so it FAILED the pre-agreed bar.** Details are in `docs/research-log.md`.
 
 ## Glossary
 

@@ -1,7 +1,9 @@
 [project]
 name = "alibi"
 version = "0.1.0"
-description = "Agent-trace triage via state estimation over windowed judge-model calls"
+description = "We check whether your agent has an alibi for what it did."
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "langchain-typesafe>=0.0.1a2",
@@ -13,6 +15,9 @@ dependencies = [
     "pydantic>=2",
     "python-dotenv>=1.2.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ahmedezz26/alibi"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
@@ -30,6 +35,8 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+# `ruff format` rewrites python code blocks inside markdown, which mangles the docs.
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
