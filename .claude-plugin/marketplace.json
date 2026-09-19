@@ -1,0 +1,12 @@
+{
+  "name": "alibi",
+  "description": "Alibi: find the step where a long AI-agent run went wrong.",
+  "owner": { "name": "ahmedezz26", "url": "https://github.com/ahmedezz26" },
+  "plugins": [
+    {
+      "name": "alibi",
+      "source": "./plugin",
+      "description": "Find where a long AI-agent run went wrong: ADAS-style filtering with Jev as the sensor."
+    }
+  ]
+}
