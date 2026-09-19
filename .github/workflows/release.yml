@@ -23,7 +23,7 @@ jobs:
       # A release must be rebuildable from its tag, and must not collide with a published one.
       - name: Check the version is tagged and unpublished
         run: |
-          version=$(uv version --short)
+          version=$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
             echo "Refusing to release from ${GITHUB_REF}: tag the commit as v${version} first." >&2
             exit 1
@@ -82,12 +82,13 @@ jobs:
       - name: Verify the published distribution
         run: |
           version="${GITHUB_REF_NAME#v}"
-          for i in $(seq 1 10); do
-            uv run --isolated --no-project --refresh \
-              --with "agent-alibi==${version}" python -c "
-import alibi.mcp_server as m
-print('published', m.build_server().name)
-" && exit 0
-            echo "not on the index yet, retrying"; sleep 15
+          check="import alibi.mcp_server as m; print('published', m.build_server().name)"
+          for _ in $(seq 1 10); do
+            if uv run --isolated --no-project --refresh \
+                 --with "agent-alibi==${version}" python -c "${check}"; then
+              exit 0
+            fi
+            echo "not on the index yet, retrying"
+            sleep 15
           done
           exit 1
