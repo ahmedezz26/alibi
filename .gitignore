@@ -17,3 +17,7 @@ data/
 
 # Evaluation outputs
 runs/
+
+# Claude Code local state (incl. .claude/worktrees, a nested copy of this repo)
+.claude/
+.superpowers/
