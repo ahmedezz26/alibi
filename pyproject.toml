@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "langchain-typesafe>=0.0.1a2",
     "langsmith>=0.12.6",
+    "mcp>=2.2,<3",
     "numpy>=2.5.3",
     "openai>=3.16.0",
     "pyarrow>=25.0.1",
@@ -19,6 +20,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "anyio>=4.15.1",
     "pytest>=9.1.1",
     "ruff>=0.16.8",
 ]
@@ -34,3 +36,4 @@ select = ["E", "F", "I", "UP", "B"]
 
 [project.scripts]
 alibi = "alibi.cli:main"
+alibi-mcp = "alibi.mcp_server:main"
