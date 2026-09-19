@@ -81,6 +81,7 @@ Keep the detailed state in **`docs/research-log.md`**: update its TL;DR, results
 - 2026-09-19: **Step 6 PASSED** on the locked held-out set (126 unseen long AgenTracer test traces), by the pre-agreed bar: the method + Jev (typed pipeline) got exact 33% vs 7% for a DeepSeek single call (p<0.0001), ±3 60% vs 48%, at 9 s/trace. The held-out set is now used. Steps 7+ are unblocked. Details are in `docs/research-log.md`.
 - 2026-09-19: **Real-failure test PASSED** on the locked TrajErrBench SWE-Bench Pro set (56 long real coding failures): V2 (method + Jev: gap card + checks + `step_plus_check` + `earliest_near_best`) got exact 16% vs 0% for a DeepSeek single call (p=0.004), ±3 21% vs 2%. The finalist round (V3/V3b) is not adopted. Details are in `docs/research-log.md`.
 - 2026-09-19: V3–V8 (finalists, sensors, blame questions, DeepSeek picker, router + commit points, look back from the end) all failed to beat V2 on dev. **LongRCA held-out (90 real SWE failures, median 120K tokens): V2 exact 7.8% vs DeepSeek whole-trace 0% (p=0.016), but below the published 13.2%, so it FAILED the pre-agreed bar.** Details are in `docs/research-log.md`.
+- 2026-09-20: **shipped.** V2 packaged as `alibi diagnose`, the `alibi-mcp` server and a Claude Code plugin, all through `alibi.localize.diagnose()` behind a 50K-token gate; repo public at https://github.com/ahmedezz26/alibi (MIT). Details are in `docs/research-log.md`.
 
 ## Glossary
 
