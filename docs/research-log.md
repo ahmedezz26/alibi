@@ -1,3 +1,5 @@
+<img src="assets/alibi-icon.svg" alt="" width="56" align="left" hspace="12">
+
 # Alibi research log
 
 _Run artifacts (`runs/*.jsonl` and the one-off scoring scripts referenced below) are kept

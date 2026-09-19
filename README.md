@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/alibi-wordmark.svg" alt="Alibi - tracking where an agent went wrong" width="420">
+</p>
+
 # Alibi
 
 [![CI](https://github.com/ahmedezz26/alibi/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedezz26/alibi/actions/workflows/ci.yml)

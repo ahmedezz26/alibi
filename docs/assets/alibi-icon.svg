@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Alibi">
+  <defs>
+    <linearGradient id="ab-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070A14"/>
+      <stop offset="100%" stop-color="#18203F"/>
+    </linearGradient>
+    <radialGradient id="ab-bloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.60"/>
+      <stop offset="45%" stop-color="#22D3EE" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ab-beam" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="120" height="120" rx="20" fill="url(#ab-bg)"/>
+
+  <!-- system panel frame, cut corners -->
+  <path d="M28,16 L100,16 L112,28 L112,100 L100,112 L28,112 L16,100 L16,28 Z"
+        fill="none" stroke="#22D3EE" stroke-width="1.4" opacity="0.40"/>
+
+  <!-- summon beam -->
+  <path d="M56,62 L68,62 L74,16 L50,16 Z" fill="url(#ab-beam)"/>
+
+  <!-- detection bloom -->
+  <circle cx="62" cy="62" r="34" fill="url(#ab-bloom)"/>
+
+  <!-- the trace -->
+  <polyline points="30,98 42,84 62,62 84,80 100,44" fill="none"
+            stroke="#2E4A7D" stroke-width="2" stroke-linejoin="miter"/>
+
+  <!-- ordinary steps -->
+  <path d="M30,94 L34,98 L30,102 L26,98 Z" fill="#3B6EA5"/>
+  <path d="M42,80 L46,84 L42,88 L38,84 Z" fill="#3B6EA5"/>
+  <path d="M84,76 L88,80 L84,84 L80,80 Z" fill="#3B6EA5"/>
+
+  <!-- where the failure surfaced -->
+  <path d="M100,39 L105,44 L100,49 L95,44 Z" fill="#8B5CF6"/>
+  <path d="M100,34 L110,44 L100,54 L90,44 Z" fill="none" stroke="#8B5CF6" stroke-width="1.2" opacity="0.65"/>
+
+  <!-- target lock -->
+  <g stroke="#22D3EE" stroke-width="2.4" fill="none" stroke-linecap="square">
+    <path d="M46,56 L46,46 L56,46"/>
+    <path d="M68,46 L78,46 L78,56"/>
+    <path d="M78,68 L78,78 L68,78"/>
+    <path d="M56,78 L46,78 L46,68"/>
+  </g>
+
+  <!-- the root cause -->
+  <path d="M62,52 L72,62 L62,72 L52,62 Z" fill="#22D3EE"/>
+  <path d="M62,56 L68,62 L62,68 L56,62 Z" fill="#E4FCFF"/>
+
+  <!-- mana particles -->
+  <circle cx="92" cy="100" r="1.4" fill="#22D3EE" opacity="0.70"/>
+  <circle cx="32" cy="50" r="1.1" fill="#22D3EE" opacity="0.55"/>
+  <circle cx="106" cy="72" r="0.9" fill="#22D3EE" opacity="0.50"/>
+  <circle cx="22" cy="72" r="0.8" fill="#22D3EE" opacity="0.45"/>
+</svg>
