@@ -19,7 +19,7 @@ def test_plugin_manifest_and_mcp_server():
     assert load("plugin/.claude-plugin/plugin.json")["name"] == "alibi"
     server = load("plugin/.mcp.json")["mcpServers"]["alibi"]
     assert server["command"] == "uvx"
-    assert "git+https://github.com/ahmedezz26/alibi" in server["args"]
+    assert "agent-alibi" in server["args"]  # the PyPI distribution, not a git build
     assert server["env"]["TYPESAFE_API_KEY"] == "${TYPESAFE_API_KEY}"
 
 

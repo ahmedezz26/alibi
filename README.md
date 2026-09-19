@@ -1,6 +1,7 @@
 # Alibi
 
 [![CI](https://github.com/ahmedezz26/alibi/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedezz26/alibi/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/agent-alibi.svg)](https://pypi.org/project/agent-alibi/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
 
@@ -115,9 +116,9 @@ Claude Code:
 Set `TYPESAFE_API_KEY` in your environment. Then ask Claude Code: "Why did my last
 session go wrong?"
 
-Command line:
+Command line (the PyPI distribution is `agent-alibi`; the import package is `alibi`):
 
-    uv tool install git+https://github.com/ahmedezz26/alibi
+    uv tool install agent-alibi
     ALIBI_JUDGE_BACKEND=typesafe ALIBI_ALLOW_PAID_MODELS=1 TYPESAFE_API_KEY=... \
       alibi diagnose path/to/trace.json
 
