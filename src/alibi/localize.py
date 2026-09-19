@@ -46,7 +46,7 @@ class Diagnosis(BaseModel):
     n_chapters: int = 0
     alarm_chapter: int | None = None
     anchor: str | None = None
-    suspects: list[Suspect] = []
+    suspects: list[Suspect] = Field(default_factory=list)
     judge_calls: int = 0
     judge_seconds: float = 0.0
     cost_usd: float = 0.0
@@ -54,6 +54,13 @@ class Diagnosis(BaseModel):
 
 def diagnose(steps: list[Step], judge: Judge | None, settings: Settings) -> Diagnosis:
     tokens = trace_tokens(steps)
+    if not steps:
+        return Diagnosis(
+            gated=True,
+            message="The trace has no steps to analyse.",
+            trace_tokens=tokens,
+            n_steps=0,
+        )
     if tokens < settings.min_trace_tokens:
         return Diagnosis(
             gated=True,

@@ -1,7 +1,8 @@
 import pytest
 
 from alibi.config import load_settings
-from alibi.localize import Diagnosis, diagnose
+from alibi.judges.base import CallRecord
+from alibi.localize import Diagnosis, _preview, diagnose
 from alibi.types import Step
 
 
@@ -12,6 +13,7 @@ class TypedJudge:
         self.calls = []
 
     def evaluate(self, state, questions):
+        self.calls.append(CallRecord("fake", 0.5, None, None, 0.002))
         out = {}
         for q in questions:
             if q.answer_type == "score":
@@ -52,6 +54,20 @@ def test_long_trace_returns_top_suspects_with_context():
     assert d.suspects[0].step_type == "assistant"
     assert d.suspects[0].preview.startswith("xxx")
     assert all(s.chapter >= 0 for s in d.suspects)
+    # cost and time are summed over the judge's own call log
+    assert d.judge_calls > 0
+    assert d.judge_seconds == pytest.approx(0.5 * d.judge_calls)
+    assert d.cost_usd == pytest.approx(0.002 * d.judge_calls)
+
+
+def test_a_trace_with_no_steps_is_reported_not_crashed():
+    d = diagnose([], judge=None, settings=settings(min_trace_tokens=0))
+    assert d.gated and d.n_steps == 0 and d.suspects == []
+
+
+def test_preview_falls_back_to_the_rendered_step():
+    """A step without a ``content`` field is previewed by its rendered form."""
+    assert _preview(0, Step("0", "tool", None, {"result": "y" * 50})).startswith("[step 0]")
 
 
 def test_long_trace_without_a_judge_is_an_error():
