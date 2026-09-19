@@ -123,8 +123,16 @@ Command line:
 
 ## Privacy
 
-Traces above the length gate are sent to TypeSafe's API. Claude Code session parsing is
-best effort: the transcript format is internal to Claude Code and may change.
+Traces above the length gate are sent to TypeSafe's API; below it, nothing leaves your
+machine. There is no telemetry. Claude Code session parsing is best effort: the transcript
+format is internal to Claude Code and may change. Session transcripts often contain source
+code and secrets, so read [SECURITY.md](SECURITY.md) before diagnosing one.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Plumbing, adapters, bug fixes and docs are welcome as
+ordinary pull requests; changes to the estimation method need a pre-registered measurement,
+for the reason the research log makes obvious.
 
 ## Background
 
