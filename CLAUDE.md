@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Project: Alibi — agent-trace triage. Treats a trace as a time series and windowed judge-model calls as noisy sensor readings, then applies state-estimation techniques (forward filtering, CUSUM drift detection, backward/RTS smoothing) to localize the step where an agent went wrong.
 
+**Current state (2026-09-20): research is done, productizing is next.** V2 + Jev is the adopted method; V3-V9 all failed their pre-registered gates. The active work is `docs/superpowers/plans/2026-09-20-alibi-mcp-plugin.md`: 7 TDD tasks turning V2 into an open-source MCP server + Claude Code plugin (repo `ahmedezz26/alibi`, MIT). The user chose **subagent-driven execution** (a fresh subagent per task, review between tasks). Building needs no paid calls; ~$0.03 of Jev credit remains, so do not plan paid runs.
+
 **Start every session by reading `docs/PROGRESS.md`.** It holds the current state, all results, data locations, budget and the next action. The project thesis, architecture rationale, data strategy and open risks are in `docs/PROJECT_BRIEF.md`; read it before any architectural decision. This file only holds what must survive every session.
 
 ## Critical rules — do not skip
