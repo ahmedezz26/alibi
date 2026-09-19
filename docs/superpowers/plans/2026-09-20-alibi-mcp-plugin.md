@@ -1,5 +1,12 @@
 # Alibi MCP Server + Claude Code Plugin Implementation Plan
 
+> **STATUS: COMPLETED 2026-09-20. This plan is history, not instructions.** All seven tasks
+> shipped; the repository is public at https://github.com/ahmedezz26/alibi. Two decisions were
+> superseded afterwards and the text below is deliberately left as it was written: the plugin
+> now installs the MCP server from PyPI (`uvx --from 'agent-alibi>=0.1,<0.2' alibi-mcp`) rather
+> than building from `git+https://github.com/ahmedezz26/alibi`, and the distribution is named
+> `agent-alibi` because `alibi` is taken on PyPI. Follow the repository, not this file.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Package the V2 method (forward filter + CUSUM + look-back, Jev as the only sensor) as an open-source MCP server and Claude Code plugin that tells a developer which 3 steps of a long agent trace to read first.

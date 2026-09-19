@@ -60,6 +60,21 @@ def test_long_trace_returns_top_suspects_with_context():
     assert d.cost_usd == pytest.approx(0.002 * d.judge_calls)
 
 
+def test_a_trace_above_the_cost_ceiling_is_refused_with_an_estimate():
+    """Jev is billed per input token, so a very long trace is refused before it is spent."""
+    d = diagnose(steps(), judge=None, settings=settings(min_trace_tokens=0, max_trace_tokens=100))
+    assert d.gated and d.suspects == [] and d.judge_calls == 0
+    assert "ALIBI_MAX_TRACE_TOKENS" in d.message
+    assert "$" in d.message
+
+
+def test_a_trace_under_the_ceiling_is_analysed():
+    d = diagnose(
+        steps(), judge=TypedJudge(), settings=settings(min_trace_tokens=0, max_trace_tokens=10_000)
+    )
+    assert not d.gated and d.suspects
+
+
 def test_a_trace_with_no_steps_is_reported_not_crashed():
     d = diagnose([], judge=None, settings=settings(min_trace_tokens=0))
     assert d.gated and d.n_steps == 0 and d.suspects == []

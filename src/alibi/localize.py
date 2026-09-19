@@ -2,7 +2,8 @@
 one trace and return the top suspect steps. Shared by the CLI, the MCP server and the plugin.
 
 Only long traces are analysed: below ``settings.min_trace_tokens`` a single direct read is
-enough, so no judge call is made.
+enough, and above ``settings.max_trace_tokens`` the Jev bill would be larger than the caller
+is likely to have agreed to. In both cases no judge call is made.
 """
 
 from __future__ import annotations
@@ -27,6 +28,8 @@ V2_CONFIG = {
     "cusum_h": 0.5,
 }
 PREVIEW_CHARS = 300
+# Forward pass plus look-back: the measured runs cost about twice the trace's tokens.
+READS_PER_TOKEN = 2
 
 
 class Suspect(BaseModel):
@@ -67,6 +70,17 @@ def diagnose(steps: list[Step], judge: Judge | None, settings: Settings) -> Diag
             message=(
                 f"Trace is {tokens:,} tokens, under the {settings.min_trace_tokens:,}-token "
                 "threshold: a single direct read is enough; Alibi adds value on long traces."
+            ),
+            trace_tokens=tokens,
+            n_steps=len(steps),
+        )
+    if tokens > settings.max_trace_tokens:
+        return Diagnosis(
+            gated=True,
+            message=(
+                f"Trace is {tokens:,} tokens, over the {settings.max_trace_tokens:,}-token "
+                f"ceiling: analysing it would cost about ${_estimated_cost(tokens, settings):.2f} "
+                "of Jev. Raise ALIBI_MAX_TRACE_TOKENS to analyse it anyway."
             ),
             trace_tokens=tokens,
             n_steps=len(steps),
@@ -118,6 +132,12 @@ def diagnose(steps: list[Step], judge: Judge | None, settings: Settings) -> Diag
         judge_seconds=round(sum(c.latency_s for c in calls), 1),
         cost_usd=round(sum(c.cost or 0 for c in calls), 5),
     )
+
+
+def _estimated_cost(tokens: int, settings: Settings) -> float:
+    """Jev bills input tokens. Every chapter is read once going forward and once coming back,
+    so the trace is paid for about twice; overlap and the cards add a little on top."""
+    return tokens / 1_000_000 * settings.typesafe_price_per_mtok * READS_PER_TOKEN
 
 
 def _suspect(i: int, score: float, chunks, steps: list[Step]) -> Suspect:

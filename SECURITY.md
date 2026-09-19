@@ -32,6 +32,19 @@ environment details and anything you pasted into the terminal, including secrets
 session before diagnosing it, or diagnose only sessions you would be comfortable sharing with
 a third-party API.
 
+## Where the plugin's code comes from
+
+The Claude Code plugin does not run the code in this repository. It launches
+`uvx --from 'agent-alibi>=0.1,<0.2' alibi-mcp`, which downloads the `agent-alibi` distribution
+from PyPI and runs it in your session with access to `TYPESAFE_API_KEY`, the trace you point
+it at, and the working directory. The pin keeps a future `0.2` from replacing the server under
+an installed plugin, but any `0.1.x` release is accepted.
+
+Releases are built and published by the workflow in `.github/workflows/release.yml` using PyPI
+trusted publishing, with PEP 740 attestations, so no long-lived token can publish this project.
+`uvx` does not verify those attestations today. If you want to run only code you have read,
+install from a checkout instead: `uvx --from /path/to/your/clone alibi-mcp`.
+
 ## Credentials
 
 - `TYPESAFE_API_KEY` is read from the environment. The Claude Code plugin passes it through as
@@ -40,6 +53,9 @@ a third-party API.
   counts and cost, and nothing else.
 - `ALIBI_ALLOW_PAID_MODELS` guards spend: `make_judge` refuses any non-`:free` model unless it
   is set to `1`. The plugin sets it because Jev is a paid API; keep it unset elsewhere.
+- `ALIBI_MAX_TRACE_TOKENS` (default 250,000) bounds what one call can cost. A larger trace is
+  refused with the estimate rather than analysed, so a 400K-token session transcript cannot
+  quietly spend several cents.
 - Local configuration belongs in `.env`, which is git-ignored. `.env.example` lists the
   variables without values.
 

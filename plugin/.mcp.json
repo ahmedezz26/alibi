@@ -2,7 +2,7 @@
   "mcpServers": {
     "alibi": {
       "command": "uvx",
-      "args": ["--from", "agent-alibi", "alibi-mcp"],
+      "args": ["--from", "agent-alibi>=0.1,<0.2", "alibi-mcp"],
       "env": {
         "TYPESAFE_API_KEY": "${TYPESAFE_API_KEY}",
         "ALIBI_JUDGE_BACKEND": "typesafe",

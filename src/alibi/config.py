@@ -18,6 +18,9 @@ DEFAULT_TYPESAFE_PRICE_PER_MTOK = 0.042
 # The method only beats a single whole-trace read on long traces (wins measured at 59K and
 # 120K tokens; no edge at 38K). Shorter traces are gated: one direct read is enough.
 DEFAULT_MIN_TRACE_TOKENS = 50_000
+# Jev bills per input token and every token is read about twice (forward, then the look-back),
+# so a very long trace is refused rather than silently spent. 250K tokens is about $0.02.
+DEFAULT_MAX_TRACE_TOKENS = 250_000
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,7 @@ class Settings:
     judge_window_tokens: int = DEFAULT_JUDGE_RELIABLE_TOKENS
     # Minimum trace length to use the windowed V2 method; shorter traces get one whole-trace read.
     min_trace_tokens: int = DEFAULT_MIN_TRACE_TOKENS
+    max_trace_tokens: int = DEFAULT_MAX_TRACE_TOKENS
     # SDK-level retries with backoff (honours Retry-After); free models are rate limited.
     judge_max_retries: int = 8
     # Spend guard: only ":free" judge models unless explicitly allowed.
@@ -57,6 +61,7 @@ def load_settings() -> Settings:
         judge_reliable_tokens=reliable,
         judge_window_tokens=int(os.environ.get("ALIBI_JUDGE_WINDOW_TOKENS") or reliable),
         min_trace_tokens=int(os.environ.get("ALIBI_MIN_TRACE_TOKENS") or DEFAULT_MIN_TRACE_TOKENS),
+        max_trace_tokens=int(os.environ.get("ALIBI_MAX_TRACE_TOKENS") or DEFAULT_MAX_TRACE_TOKENS),
         judge_max_retries=int(os.environ.get("ALIBI_JUDGE_MAX_RETRIES") or 8),
         allow_paid_models=os.environ.get("ALIBI_ALLOW_PAID_MODELS") == "1",
         judge_reasoning=(os.environ.get("ALIBI_JUDGE_REASONING") or "").strip().lower(),

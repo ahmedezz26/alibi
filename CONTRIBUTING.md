@@ -17,6 +17,21 @@ uv run alibi diagnose examples/sample_trace.json
 
 The suite never touches the network: every judge in the tests is a fake. Keep it that way.
 
+### Working on the MCP server or the plugin
+
+The published plugin launches `uvx --from 'agent-alibi>=0.1,<0.2' alibi-mcp`, which downloads
+the release from PyPI, so your edits will not be picked up. To exercise your checkout, point a
+user-level `.mcp.json` at it:
+
+```json
+{ "mcpServers": { "alibi-dev": { "command": "uvx",
+  "args": ["--from", "/path/to/your/clone", "alibi-mcp"],
+  "env": { "TYPESAFE_API_KEY": "${TYPESAFE_API_KEY}", "ALIBI_JUDGE_BACKEND": "typesafe",
+           "ALIBI_ALLOW_PAID_MODELS": "1" } } } }
+```
+
+`uv run alibi-mcp` also runs the server from the working tree, over stdio.
+
 ## The rules that matter
 
 1. **No paid calls in tests, ever.** `make_judge` refuses non-`:free` models unless
@@ -60,6 +75,24 @@ estimation layer is under the evidence rule.
   exactly those.
 - Commit messages: a short imperative subject, and a body explaining why when the reason is
   not obvious from the diff.
+
+## Releasing
+
+The distribution is `agent-alibi` on PyPI; the import package is `alibi`. A release is
+reproducible from its tag, so the order matters:
+
+1. Bump `version` in `pyproject.toml` **and** `plugin/.claude-plugin/plugin.json` (a test
+   asserts they match).
+2. For a new minor version, bump the `--from` pin in `plugin/.mcp.json` and the two constants
+   in `tests/test_plugin_files.py`.
+3. Append the release to `docs/research-log.md`.
+4. Commit, then tag that commit: `git tag vX.Y.Z && git push origin main --tags`.
+5. The tag triggers `.github/workflows/release.yml`: build, smoke-test the wheel and the sdist,
+   publish through trusted publishing, then verify the published artifact installs.
+6. `gh release create vX.Y.Z --notes ...`.
+
+Do not publish from `workflow_dispatch` on an untagged commit: the artifact then cannot be
+rebuilt from git, and the README that PyPI renders is frozen per release.
 
 ## Where things live
 
