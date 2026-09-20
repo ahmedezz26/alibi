@@ -136,8 +136,9 @@ refuses to run. The plugin sets both variables for you.
 One trace per run. Three kinds are understood, and `--source auto` (the default) picks by
 file extension.
 
-**A JSON trace file** (`.json`) - a list of steps, oldest first. Only `type` and `inputs`
-matter for the analysis; everything else is optional:
+**A JSON trace file** (`.json`) - a list of steps, oldest first. Every field is optional, but
+include `outputs` and `error` where you have them: the judge reads the whole rendered step, and
+a misread observation or an unfixed error is most of the signal the method looks for.
 
 ```json
 [
@@ -157,10 +158,10 @@ a `TraceSource` adapter (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 **A Claude Code session** (`.jsonl`) - the transcripts under
 `~/.claude/projects/<project>/<session-id>.jsonl`, where `<project>` is your project's path
-with slashes and underscores turned into dashes (`/Users/me/LLM_projects/app` becomes
+with slashes, underscores and dots turned into dashes (`/Users/me/LLM_projects/app` becomes
 `-Users-me-LLM-projects-app`). To diagnose the most recent session of the project you are in:
 
-    alibi diagnose "$(ls -t ~/.claude/projects/"${PWD//[\/_]/-}"/*.jsonl | head -1)"
+    alibi diagnose "$(ls -t ~/.claude/projects/"${PWD//[\/_.]/-}"/*.jsonl | head -1)"
 
 Parsing is best effort: the format is internal to Claude Code and may change. Assistant text,
 tool calls and tool results become steps; thinking blocks are skipped.
@@ -190,8 +191,9 @@ over a single time series. To sweep a directory, loop:
 
 `--json` prints the same thing as a JSON object (`gated`, `message`, `trace_tokens`,
 `n_steps`, `n_chapters`, `alarm_chapter`, `anchor`, `suspects[]`, `judge_calls`,
-`judge_seconds`, `cost_usd`) for piping into something else. Exit code is 0, or 2 if a trace
-needs the judge and the Jev backend is not configured.
+`judge_seconds`, `cost_usd`) for piping into something else. Exit code is 0, or 2 if the trace
+file is missing or unreadable, or if a trace needs the judge and the Jev backend is not
+configured.
 
 ## The two gates, and what they cost
 
@@ -199,9 +201,9 @@ Nothing is sent anywhere, and nothing is spent, unless the trace falls between t
 
 | Trace size | What happens | Override |
 |---|---|---|
-| Under 50,000 tokens | Not analysed: "a single direct read is enough" | `--min-tokens`, `ALIBI_MIN_TRACE_TOKENS` |
+| Under 50,000 tokens | Not analysed: "a single direct read is enough" | `--min-trace-tokens`, `ALIBI_MIN_TRACE_TOKENS` |
 | 50,000 to 250,000 tokens | Analysed; about $0.01 per 100K tokens | |
-| Over 250,000 tokens | Refused with an estimated cost, so a huge transcript cannot spend unannounced | `--max-tokens`, `ALIBI_MAX_TRACE_TOKENS` |
+| Over 250,000 tokens | Refused with an estimated cost, so a huge transcript cannot spend unannounced | `--max-trace-tokens`, `ALIBI_MAX_TRACE_TOKENS` |
 
 ## The MCP tool
 

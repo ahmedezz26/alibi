@@ -32,6 +32,15 @@ PREVIEW_CHARS = 300
 READS_PER_TOKEN = 2
 
 
+def needs_judge(steps: list[Step], settings: Settings) -> bool:
+    """Whether ``diagnose`` will call the judge for this trace: the exact complement of the
+    gates below. Callers build a judge only when this is true, so a refusal costs nothing and
+    needs no API key. Keep it in step with ``diagnose``."""
+    if not steps:
+        return False
+    return settings.min_trace_tokens <= trace_tokens(steps) <= settings.max_trace_tokens
+
+
 class Suspect(BaseModel):
     step: int = Field(description="0-based step index in the trace.")
     score: float = Field(description="Fused evidence score (higher = more likely the cause).")
@@ -42,7 +51,12 @@ class Suspect(BaseModel):
 
 
 class Diagnosis(BaseModel):
-    gated: bool = Field(description="True when the trace was too short to analyse.")
+    gated: bool = Field(
+        description=(
+            "True when the trace was not analysed and nothing was spent: it is empty, under "
+            "the length gate, or over the cost ceiling. `message` says which."
+        )
+    )
     message: str
     trace_tokens: int
     n_steps: int

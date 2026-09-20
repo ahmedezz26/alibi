@@ -127,8 +127,20 @@ def main(argv: list[str] | None = None) -> int:
         "--source", choices=["auto", "json", "claude-code", "langsmith"], default="auto"
     )
     diag.add_argument("--project", help="LangSmith project name")
-    diag.add_argument("--min-tokens", type=int, help="override the length gate")
-    diag.add_argument("--max-tokens", type=int, help="override the cost ceiling")
+    diag.add_argument(
+        "--min-trace-tokens",
+        "--min-tokens",
+        dest="min_tokens",
+        type=int,
+        help="override the length gate (ALIBI_MIN_TRACE_TOKENS)",
+    )
+    diag.add_argument(
+        "--max-trace-tokens",
+        "--max-tokens",
+        dest="max_tokens",
+        type=int,
+        help="override the cost ceiling (ALIBI_MAX_TRACE_TOKENS)",
+    )
     diag.add_argument("--json", action="store_true", help="print the Diagnosis as JSON")
 
     args = parser.parse_args(argv)
@@ -184,8 +196,7 @@ def main(argv: list[str] | None = None) -> int:
 def _diagnose(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
-    from alibi.chunking import trace_tokens
-    from alibi.localize import diagnose
+    from alibi.localize import diagnose, needs_judge
     from alibi.sources.auto import load_steps
 
     settings = load_settings()
@@ -198,10 +209,11 @@ def _diagnose(args: argparse.Namespace) -> int:
     except FileNotFoundError as e:
         print(e, file=sys.stderr)
         return 2
+    except (OSError, json.JSONDecodeError, TypeError, AttributeError) as e:
+        print(f"could not read {args.trace}: {e}", file=sys.stderr)
+        return 2
     judge = None
-    # A judge is only needed between the two gates: under the first and over the second,
-    # diagnose() answers without spending a call, so no backend or key is required.
-    if settings.min_trace_tokens <= trace_tokens(steps) <= settings.max_trace_tokens:
+    if needs_judge(steps, settings):
         if settings.judge_backend != "typesafe":
             print(
                 "Alibi needs the Jev backend: set ALIBI_JUDGE_BACKEND=typesafe and "

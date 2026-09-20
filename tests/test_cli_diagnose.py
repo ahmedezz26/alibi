@@ -39,6 +39,32 @@ def test_a_missing_trace_file_is_a_clean_error(tmp_path, capsys):
     assert "no such trace file" in capsys.readouterr().err
 
 
+def test_an_empty_trace_needs_no_judge(tmp_path, capsys, monkeypatch):
+    """diagnose() answers an empty trace for free, so the CLI must not demand a backend."""
+
+    def no_judge(*_a, **_k):
+        raise AssertionError("an empty trace must not build a judge")
+
+    monkeypatch.setattr(cli, "make_judge", no_judge)
+    p = tmp_path / "empty.json"
+    p.write_text("[]")
+    assert cli.main(["diagnose", str(p), "--min-tokens", "0"]) == 0
+    assert "no steps" in capsys.readouterr().out
+
+
+def test_a_malformed_trace_file_is_a_clean_error(tmp_path, capsys):
+    p = tmp_path / "bad.json"
+    p.write_text("{not json")
+    assert cli.main(["diagnose", str(p)]) == 2
+    assert "could not read" in capsys.readouterr().err
+
+
+def test_the_ceiling_flag_is_named_after_its_setting(tmp_path, capsys):
+    trace = trace_file(tmp_path, n=3)
+    assert cli.main(["diagnose", trace, "--min-tokens", "0", "--max-trace-tokens", "1"]) == 0
+    assert "ceiling" in capsys.readouterr().out
+
+
 def test_module_entry_point_runs(tmp_path):
     """`python -m alibi.cli` must define every handler before main() dispatches."""
     out = subprocess.run(

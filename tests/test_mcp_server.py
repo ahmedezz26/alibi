@@ -43,3 +43,19 @@ async def test_short_trace_is_gated_and_never_builds_a_judge(tmp_path):
         result = await client.call_tool("diagnose_trace", {"trace": trace_file(tmp_path)})
     assert result.structured_content["gated"] is True
     assert result.structured_content["suspects"] == []
+
+
+@pytest.mark.anyio
+async def test_a_long_trace_refuses_a_non_jev_backend(tmp_path, monkeypatch):
+    """Without this guard a private trace would be POSTed to a free OpenRouter endpoint."""
+    monkeypatch.setenv("ALIBI_JUDGE_BACKEND", "openrouter")
+    monkeypatch.setenv("ALIBI_MIN_TRACE_TOKENS", "0")
+
+    def factory():
+        raise AssertionError("no judge may be built for the wrong backend")
+
+    async with Client(build_server(judge_factory=factory)) as client:
+        result = await client.call_tool("diagnose_trace", {"trace": trace_file(tmp_path)})
+    assert result.is_error
+    assert "ALIBI_JUDGE_BACKEND=typesafe" in result.content[0].text
+    assert "Nothing was sent" in result.content[0].text
