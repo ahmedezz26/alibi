@@ -117,14 +117,108 @@ Claude Code:
     /plugin marketplace add ahmedezz26/alibi
     /plugin install alibi@alibi
 
-Set `TYPESAFE_API_KEY` in your environment. Then ask Claude Code: "Why did my last
-session go wrong?"
+Set `TYPESAFE_API_KEY` in your environment (get a key from TypeSafe AI). The plugin starts
+the MCP server itself with `uvx`, so there is nothing else to install. Then ask Claude Code
+"why did my last session go wrong?" and it will find the session file, call the tool and
+read the suspect steps back to you.
 
 Command line (the PyPI distribution is `agent-alibi`; the import package is `alibi`):
 
     uv tool install agent-alibi
-    ALIBI_JUDGE_BACKEND=typesafe ALIBI_ALLOW_PAID_MODELS=1 TYPESAFE_API_KEY=... \
-      alibi diagnose path/to/trace.json
+    export ALIBI_JUDGE_BACKEND=typesafe ALIBI_ALLOW_PAID_MODELS=1 TYPESAFE_API_KEY=...
+    alibi diagnose path/to/trace.json
+
+`ALIBI_ALLOW_PAID_MODELS=1` is the spend guard: Jev is a paid API, and without it the judge
+refuses to run. The plugin sets both variables for you.
+
+## What you can point it at
+
+One trace per run. Three kinds are understood, and `--source auto` (the default) picks by
+file extension.
+
+**A JSON trace file** (`.json`) - a list of steps, oldest first. Only `type` and `inputs`
+matter for the analysis; everything else is optional:
+
+```json
+[
+  {"type": "llm",  "name": "plan",           "inputs": {"task": "Book the cheapest direct flight."},
+                                             "outputs": {"text": "Plan: search, filter, pick."}},
+  {"type": "tool", "name": "search_flights", "inputs": {"from": "CAI", "to": "BER"},
+                                             "outputs": {"flights": []}},
+  {"type": "tool", "name": "book",           "inputs": {"flight": "TK33"}, "error": "not direct"}
+]
+```
+
+Recognised keys: `type` (free text: `llm`, `tool`, `assistant`, `user`, ...), `name`,
+`inputs`, `outputs`, `error`, `step_id`, `timestamp` (ISO 8601). Steps are numbered by
+position, so `step 74` in the output is the 75th entry in the file. `examples/sample_trace.json`
+is a working example. If your agent writes some other format, convert it to this shape or add
+a `TraceSource` adapter (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+
+**A Claude Code session** (`.jsonl`) - the transcripts under
+`~/.claude/projects/<project>/<session-id>.jsonl`, where `<project>` is your project's path
+with slashes and underscores turned into dashes (`/Users/me/LLM_projects/app` becomes
+`-Users-me-LLM-projects-app`). To diagnose the most recent session of the project you are in:
+
+    alibi diagnose "$(ls -t ~/.claude/projects/"${PWD//[\/_]/-}"/*.jsonl | head -1)"
+
+Parsing is best effort: the format is internal to Claude Code and may change. Assistant text,
+tool calls and tool results become steps; thinking blocks are skipped.
+
+**A LangSmith trace** - pass the trace id and the project, with `LANGSMITH_API_KEY` set:
+
+    alibi diagnose <trace-id> --source langsmith --project "my-project"
+
+There is no folder mode: Alibi diagnoses one run at a time, because the method is a filter
+over a single time series. To sweep a directory, loop:
+
+    for f in traces/*.json; do alibi diagnose "$f" --json > "${f%.json}.diagnosis.json"; done
+
+## Reading the result
+
+    Read these 3 steps first, in order.
+    80,778 tokens, 10 chapters, alarm at chapter 6; 17 Jev calls, 35 s, $0.0096
+    1. step 74 (assistant), chapter 6, score 0.277
+       '...'
+
+- **chapters** - how many 10K-token windows the trace was split into.
+- **alarm at chapter N** - where CUSUM first saw the agent's health break down. The cause is
+  usually at or before it, which is why the look-back starts there. `alarm at chapter None`
+  means no alarm fired and the run's ending was used as the anchor instead.
+- **score** - fused evidence for that step, not a probability. Only the ordering is meaningful.
+- **steps** are 0-based positions in the trace you passed in.
+
+`--json` prints the same thing as a JSON object (`gated`, `message`, `trace_tokens`,
+`n_steps`, `n_chapters`, `alarm_chapter`, `anchor`, `suspects[]`, `judge_calls`,
+`judge_seconds`, `cost_usd`) for piping into something else. Exit code is 0, or 2 if a trace
+needs the judge and the Jev backend is not configured.
+
+## The two gates, and what they cost
+
+Nothing is sent anywhere, and nothing is spent, unless the trace falls between them:
+
+| Trace size | What happens | Override |
+|---|---|---|
+| Under 50,000 tokens | Not analysed: "a single direct read is enough" | `--min-tokens`, `ALIBI_MIN_TRACE_TOKENS` |
+| 50,000 to 250,000 tokens | Analysed; about $0.01 per 100K tokens | |
+| Over 250,000 tokens | Refused with an estimated cost, so a huge transcript cannot spend unannounced | `--max-tokens`, `ALIBI_MAX_TRACE_TOKENS` |
+
+## The MCP tool
+
+The server (`alibi-mcp`, stdio) exposes exactly one tool for any MCP client, not just
+Claude Code:
+
+    diagnose_trace(trace: str, source: str = "auto", project: str | None = None) -> Diagnosis
+
+`trace` is the same path or id the CLI takes. To wire it up by hand:
+
+```json
+{ "mcpServers": { "alibi": {
+  "command": "uvx",
+  "args": ["--from", "agent-alibi>=0.1,<0.2", "alibi-mcp"],
+  "env": { "TYPESAFE_API_KEY": "...", "ALIBI_JUDGE_BACKEND": "typesafe",
+           "ALIBI_ALLOW_PAID_MODELS": "1" } } } }
+```
 
 ## Privacy
 

@@ -128,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     diag.add_argument("--project", help="LangSmith project name")
     diag.add_argument("--min-tokens", type=int, help="override the length gate")
+    diag.add_argument("--max-tokens", type=int, help="override the cost ceiling")
     diag.add_argument("--json", action="store_true", help="print the Diagnosis as JSON")
 
     args = parser.parse_args(argv)
@@ -190,9 +191,17 @@ def _diagnose(args: argparse.Namespace) -> int:
     settings = load_settings()
     if args.min_tokens is not None:
         settings = replace(settings, min_trace_tokens=args.min_tokens)
-    steps = load_steps(args.trace, args.source, args.project)
+    if args.max_tokens is not None:
+        settings = replace(settings, max_trace_tokens=args.max_tokens)
+    try:
+        steps = load_steps(args.trace, args.source, args.project)
+    except FileNotFoundError as e:
+        print(e, file=sys.stderr)
+        return 2
     judge = None
-    if trace_tokens(steps) >= settings.min_trace_tokens:
+    # A judge is only needed between the two gates: under the first and over the second,
+    # diagnose() answers without spending a call, so no backend or key is required.
+    if settings.min_trace_tokens <= trace_tokens(steps) <= settings.max_trace_tokens:
         if settings.judge_backend != "typesafe":
             print(
                 "Alibi needs the Jev backend: set ALIBI_JUDGE_BACKEND=typesafe and "

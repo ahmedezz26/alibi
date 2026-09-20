@@ -26,6 +26,19 @@ def test_json_output_is_a_diagnosis(tmp_path, capsys):
     assert out["gated"] is True and out["suspects"] == []
 
 
+def test_max_tokens_overrides_the_cost_ceiling(tmp_path, capsys):
+    """The ceiling is overridable from the command line, not only through the environment."""
+    trace = trace_file(tmp_path, n=3)
+    assert cli.main(["diagnose", trace, "--min-tokens", "0", "--max-tokens", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "ceiling" in out and "ALIBI_MAX_TRACE_TOKENS" in out
+
+
+def test_a_missing_trace_file_is_a_clean_error(tmp_path, capsys):
+    assert cli.main(["diagnose", str(tmp_path / "gone.jsonl")]) == 2
+    assert "no such trace file" in capsys.readouterr().err
+
+
 def test_module_entry_point_runs(tmp_path):
     """`python -m alibi.cli` must define every handler before main() dispatches."""
     out = subprocess.run(

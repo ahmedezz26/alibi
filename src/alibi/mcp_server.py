@@ -30,7 +30,8 @@ def build_server(judge_factory: Callable[[], Judge] | None = None) -> MCPServer:
         settings = load_settings()
         steps = load_steps(trace, source, project)
         judge = None
-        if trace_tokens(steps) >= settings.min_trace_tokens:
+        # Only between the gates is a judge needed; outside them diagnose() answers for free.
+        if settings.min_trace_tokens <= trace_tokens(steps) <= settings.max_trace_tokens:
             judge = (judge_factory or (lambda: make_judge(settings)))()
         return diagnose(steps, judge, settings)
 
