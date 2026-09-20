@@ -127,3 +127,29 @@ def test_lead_suspect_keeps_its_real_score_when_it_is_outside_the_top_three():
     d = diagnose(steps(), judge=NearBestJudge(), settings=settings(min_trace_tokens=0))
     assert [s.step for s in d.suspects] == [1, 6, 7]
     assert [s.score for s in d.suspects] == pytest.approx([0.425, 0.5, 0.49])
+
+
+def test_the_judge_factory_is_used_when_the_trace_is_analysed():
+    """Production passes a factory, not a judge; its result must reach the pipeline."""
+    built = []
+
+    def factory():
+        built.append(1)
+        return TypedJudge()
+
+    d = diagnose(steps(), settings=settings(min_trace_tokens=0), judge_factory=factory)
+    assert built == [1]
+    assert not d.gated and d.suspects[0].step == 7
+
+
+def test_a_gated_trace_never_calls_the_factory():
+    def factory():
+        raise AssertionError("a gated trace must not build a judge")
+
+    d = diagnose(steps(), settings=settings(min_trace_tokens=10_000), judge_factory=factory)
+    assert d.gated
+
+
+def test_a_judge_and_a_factory_together_is_an_error():
+    with pytest.raises(ValueError, match="not both"):
+        diagnose(steps(), judge=TypedJudge(), settings=settings(), judge_factory=TypedJudge)

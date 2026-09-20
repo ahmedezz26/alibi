@@ -12,13 +12,9 @@ from alibi.chunking import chunk_trace
 from alibi.config import load_settings
 from alibi.drift import DEFAULT_BASELINE, DEFAULT_H, DEFAULT_K, cusum_path, detect_drift
 from alibi.forward import forward_pass
-from alibi.judges import Judge, make_judge
+from alibi.judges import make_judge
 from alibi.sources import TraceSource
 from alibi.sources.auto import SOURCES
-
-
-class JudgeUnavailable(RuntimeError):
-    """The judge cannot be built: the wrong backend, or a missing key."""
 
 
 def _make_source(args: argparse.Namespace) -> TraceSource:
@@ -125,16 +121,24 @@ def main(argv: list[str] | None = None) -> int:
     dl.add_argument("--data-dir", default="data/agentrx")
 
     diag = sub.add_parser(
-        "diagnose", help="V2 + Jev: the 3 steps of a long agent trace to read first"
+        "diagnose",
+        help="V2 + Jev: the 3 steps of a long agent trace to read first",
+        allow_abbrev=False,  # --min-tokens is kept as an alias, so no prefix is ambiguous
     )
     diag.add_argument("trace", help="path to a .json / Claude Code .jsonl trace, or a LangSmith id")
     diag.add_argument("--source", choices=list(SOURCES), default="auto")
     diag.add_argument("--project", help="LangSmith project name")
     diag.add_argument(
-        "--min-trace-tokens", type=int, help="override the length gate (ALIBI_MIN_TRACE_TOKENS)"
+        "--min-trace-tokens",
+        "--min-tokens",
+        type=int,
+        help="override the length gate (ALIBI_MIN_TRACE_TOKENS)",
     )
     diag.add_argument(
-        "--max-trace-tokens", type=int, help="override the cost ceiling (ALIBI_MAX_TRACE_TOKENS)"
+        "--max-trace-tokens",
+        "--max-tokens",
+        type=int,
+        help="override the cost ceiling (ALIBI_MAX_TRACE_TOKENS)",
     )
     diag.add_argument("--json", action="store_true", help="print the Diagnosis as JSON")
 
@@ -191,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
 def _diagnose(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
-    from alibi.localize import diagnose, unsupported_backend
+    from alibi.localize import JudgeUnavailable, build_judge, diagnose
     from alibi.sources.auto import TraceFormatError, load_steps
 
     settings = load_settings()
@@ -201,23 +205,16 @@ def _diagnose(args: argparse.Namespace) -> int:
         settings = replace(settings, max_trace_tokens=args.max_trace_tokens)
     try:
         steps = load_steps(args.trace, args.source, args.project)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, TraceFormatError, OSError) as e:
         print(e, file=sys.stderr)
         return 2
-    except (TraceFormatError, OSError) as e:
-        print(e, file=sys.stderr)
-        return 2
-
-    def judge_factory() -> Judge:
-        problem = unsupported_backend(settings)
-        if problem:
-            raise JudgeUnavailable(problem)
-        return make_judge(settings)
 
     try:
         # The factory runs only if this trace is actually analysed, so a refusal needs no key.
-        d = diagnose(steps, settings=settings, judge_factory=judge_factory)
-    except (JudgeUnavailable, RuntimeError) as e:
+        # Only a failure to BUILD the judge is caught: a failure while judging has already
+        # cost money and must not look like a free refusal.
+        d = diagnose(steps, settings=settings, judge_factory=lambda: build_judge(settings))
+    except JudgeUnavailable as e:
         print(e, file=sys.stderr)
         return 2
     if args.json:

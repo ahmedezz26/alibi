@@ -59,16 +59,10 @@ def test_a_malformed_trace_file_is_a_clean_error(tmp_path, capsys):
     assert "could not read" in capsys.readouterr().err
 
 
-def test_the_ceiling_flag_is_named_after_its_setting(tmp_path, capsys):
+def test_the_flag_spellings_from_0_1_3_still_work(tmp_path, capsys):
+    """--min-tokens/--max-tokens shipped in 0.1.3; scripts using them must keep working."""
     trace = trace_file(tmp_path, n=3)
-    assert cli.main(["diagnose", trace, "--min-trace-tokens", "0", "--max-trace-tokens", "1"]) == 0
-    assert "ceiling" in capsys.readouterr().out
-
-
-def test_the_gate_flags_keep_unambiguous_abbreviations(tmp_path, capsys):
-    """One spelling per setting, so argparse can still resolve a prefix."""
-    trace = trace_file(tmp_path, n=3)
-    assert cli.main(["diagnose", trace, "--min-t", "0", "--max-t", "1"]) == 0
+    assert cli.main(["diagnose", trace, "--min-tokens", "0", "--max-tokens", "1"]) == 0
     assert "ceiling" in capsys.readouterr().out
 
 

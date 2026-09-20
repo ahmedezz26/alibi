@@ -6,6 +6,26 @@ from mcp import Client
 from alibi.mcp_server import build_server
 
 
+class StepSevenJudge:
+    """Health jumps at the last chapter; step 7 is the likeliest cause."""
+
+    calls = ()
+
+    def evaluate(self, state, questions):
+        out = {}
+        for q in questions:
+            if q.answer_type == "score":
+                out[q.id] = 1.0 if "[step 8]" in state else 0.0
+            elif q.answer_type == "choice":
+                first = next(iter(q.criteria))
+                out[q.id] = {"choice": first, "probabilities": {first: 1.0}, "confidence": 1.0}
+            elif q.id == "s7":
+                out[q.id] = 0.9
+            else:
+                out[q.id] = 0.1
+        return out
+
+
 def trace_file(tmp_path, n=3):
     p = tmp_path / "t.json"
     p.write_text(json.dumps([{"type": "user", "inputs": {"q": "hi"}}] * n))
@@ -90,3 +110,22 @@ async def test_the_source_argument_is_constrained_in_the_schema():
         tools = await client.list_tools()
     source = tools.tools[0].input_schema["properties"]["source"]
     assert set(source.get("enum", [])) == {"auto", "json", "claude-code", "langsmith"}
+
+
+@pytest.mark.anyio
+async def test_a_long_trace_is_analysed_with_the_injected_judge(tmp_path, monkeypatch):
+    """The success path: nothing else in the suite proves the factory's judge is used."""
+    monkeypatch.setenv("ALIBI_JUDGE_BACKEND", "typesafe")
+    monkeypatch.setenv("ALIBI_MIN_TRACE_TOKENS", "0")
+    monkeypatch.setenv("ALIBI_JUDGE_WINDOW_TOKENS", "300")
+
+    kinds = ["user"] + ["assistant", "tool"] * 9
+    trace = tmp_path / "t.json"
+    trace.write_text(
+        json.dumps([{"type": kinds[i], "inputs": {"content": "x" * 400}} for i in range(9)])
+    )
+    async with Client(build_server(judge_factory=StepSevenJudge)) as client:
+        result = await client.call_tool("diagnose_trace", {"trace": str(trace)})
+    assert not result.is_error
+    assert result.structured_content["gated"] is False
+    assert result.structured_content["suspects"][0]["step"] == 7

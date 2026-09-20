@@ -13,11 +13,11 @@ from collections.abc import Callable
 from pydantic import BaseModel, Field
 
 from alibi.backward import backward_pass_typed, combine_scores, suspect_probs
-from alibi.chunking import chunk_trace, render_step, trace_tokens
-from alibi.config import Settings, load_settings
+from alibi.chunking import chunk_trace, render_step, step_costs, trace_tokens
+from alibi.config import Settings
 from alibi.drift import detect_drift
 from alibi.forward import forward_pass_typed
-from alibi.judges import Judge
+from alibi.judges import Judge, make_judge
 from alibi.types import Step
 
 # V2, the adopted method (see docs/research-log.md).
@@ -49,10 +49,34 @@ def unsupported_backend(settings: Settings) -> str | None:
     return None
 
 
-def _gate(steps: list[Step], settings: Settings) -> tuple[int, str | None]:
+class JudgeUnavailable(Exception):
+    """The judge cannot be built: an unsupported backend, a missing key, or the spend guard.
+
+    Deliberately not a RuntimeError, so a surface can catch it without also catching failures
+    raised by the judge while it is analysing a trace, which have already cost money.
+    """
+
+
+def build_judge(settings: Settings, make: Callable[[], Judge] | None = None) -> Judge:
+    """The judge both surfaces use, with one policy and one error type. ``make`` replaces the
+    construction (tests inject a fake) but never the policy: the backend is checked first
+    either way, so an injected judge cannot sidestep the guard."""
+    problem = unsupported_backend(settings)
+    if problem:
+        raise JudgeUnavailable(problem)
+    try:
+        return (make or (lambda: make_judge(settings)))()
+    except RuntimeError as e:  # a missing key, or the paid-model guard
+        raise JudgeUnavailable(f"{e}. Nothing was sent.") from e
+
+
+def gate(
+    steps: list[Step], settings: Settings, tokens: int | None = None
+) -> tuple[int, str | None]:
     """The trace's size, and why it will not be analysed (None when it will be). Every
-    refusal costs nothing: no judge is built and nothing leaves the machine."""
-    tokens = trace_tokens(steps)
+    refusal costs nothing: no judge is built and nothing leaves the machine. Pass ``tokens``
+    if you have already counted them."""
+    tokens = trace_tokens(steps) if tokens is None else tokens
     if not steps:
         return tokens, "The trace has no steps to analyse."
     if tokens < settings.min_trace_tokens:
@@ -100,14 +124,17 @@ class Diagnosis(BaseModel):
 def diagnose(
     steps: list[Step],
     judge: Judge | None = None,
-    settings: Settings | None = None,
+    *,
+    settings: Settings,
     judge_factory: Callable[[], Judge] | None = None,
 ) -> Diagnosis:
-    """Localize the failure in one trace. ``judge_factory`` is called only if the trace is
-    actually going to be analysed, so a caller can pass one without building a paid client
-    (or requiring a key) for a trace that will be refused."""
-    settings = settings or load_settings()
-    tokens, refusal = _gate(steps, settings)
+    """Localize the failure in one trace. Give it a ``judge``, or a ``judge_factory`` that is
+    called only if the trace is actually analysed - so a caller need not build a paid client,
+    or hold a key, for a trace that will be refused."""
+    if judge is not None and judge_factory is not None:
+        raise ValueError("pass judge or judge_factory, not both")
+    rendered, costs = step_costs(steps)
+    tokens, refusal = gate(steps, settings, tokens=sum(costs))
     if refusal is not None:
         return Diagnosis(gated=True, message=refusal, trace_tokens=tokens, n_steps=len(steps))
     if judge is None:
@@ -115,7 +142,7 @@ def diagnose(
             raise ValueError("a typed (Jev) judge is required for traces above the length gate")
         judge = judge_factory()
     window = settings.judge_window_tokens
-    chunks = chunk_trace(steps, window, window // 8)
+    chunks = chunk_trace(steps, window, window // 8, prerendered=(rendered, costs))
     fwd = forward_pass_typed(judge, chunks, steps)
     alarms = [
         cp.alarm

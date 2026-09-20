@@ -43,6 +43,15 @@ def render_step(position: int, step: Step) -> str:
     return "\n".join(parts)
 
 
+def step_costs(
+    steps: Sequence[Step], count_tokens: TokenCounter = approx_tokens
+) -> tuple[list[str], list[int]]:
+    """Each step rendered once, with its token cost. Rendering a long trace is not free, so
+    callers that need both the total and the chunks (the whole pipeline) share one pass."""
+    rendered = [render_step(i, s) for i, s in enumerate(steps)]
+    return rendered, [count_tokens(r) for r in rendered]
+
+
 def trace_tokens(steps: Sequence[Step], count_tokens: TokenCounter = approx_tokens) -> int:
     return sum(count_tokens(render_step(i, s)) for i, s in enumerate(steps))
 
@@ -73,6 +82,7 @@ def chunk_trace(
     max_tokens: int = 28_000,
     overlap_tokens: int = 2_000,
     count_tokens: TokenCounter = approx_tokens,
+    prerendered: tuple[list[str], list[int]] | None = None,
 ) -> list[Chunk]:
     """Greedily pack whole steps into windows of at most ``max_tokens``.
 
@@ -80,12 +90,22 @@ def chunk_trace(
     ``overlap_tokens``, so a failure moment isn't split across a hard boundary.
     A single step larger than ``max_tokens`` is clipped (head and tail kept) and becomes
     its own chunk.
+
+    ``prerendered`` is ``step_costs(steps)`` from a caller that already rendered them; only
+    the steps that overflow the window are re-rendered here.
     """
     if overlap_tokens >= max_tokens:
         raise ValueError("overlap_tokens must be smaller than max_tokens")
 
-    rendered = [clip_step(render_step(i, s), max_tokens, count_tokens) for i, s in enumerate(steps)]
-    costs = [count_tokens(r) for r in rendered]
+    if prerendered is None:
+        rendered = [render_step(i, s) for i, s in enumerate(steps)]
+        costs = [count_tokens(r) for r in rendered]
+    else:
+        rendered, costs = list(prerendered[0]), list(prerendered[1])
+    for i, cost in enumerate(costs):
+        if cost > max_tokens:
+            rendered[i] = clip_step(rendered[i], max_tokens, count_tokens)
+            costs[i] = count_tokens(rendered[i])
 
     chunks: list[Chunk] = []
     start = 0
