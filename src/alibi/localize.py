@@ -32,6 +32,21 @@ PREVIEW_CHARS = 300
 READS_PER_TOKEN = 2
 
 
+SUPPORTED_BACKEND = "typesafe"
+BACKEND_HELP = (
+    "Alibi needs the Jev backend: set ALIBI_JUDGE_BACKEND=typesafe, TYPESAFE_API_KEY and "
+    "ALIBI_ALLOW_PAID_MODELS=1. Nothing was sent."
+)
+
+
+def unsupported_backend(settings: Settings) -> str | None:
+    """Why this trace cannot be judged, or None when the backend is usable. Jev is the only
+    sensor the method was measured with, and free endpoints may log prompts."""
+    if settings.judge_backend != SUPPORTED_BACKEND:
+        return BACKEND_HELP
+    return None
+
+
 def needs_judge(steps: list[Step], settings: Settings) -> bool:
     """Whether ``diagnose`` will call the judge for this trace: the exact complement of the
     gates below. Callers build a judge only when this is true, so a refusal costs nothing and

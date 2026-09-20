@@ -151,7 +151,8 @@ a misread observation or an unfixed error is most of the signal the method looks
 ```
 
 Recognised keys: `type` (free text: `llm`, `tool`, `assistant`, `user`, ...), `name`,
-`inputs`, `outputs`, `error`, `step_id`, `timestamp` (ISO 8601). Steps are numbered by
+`inputs`, `outputs`, `error`, `step_id`, `timestamp` (ISO 8601 if present - a value
+`datetime.fromisoformat` cannot parse is rejected with exit code 2). Steps are numbered by
 position, so `step 74` in the output is the 75th entry in the file. `examples/sample_trace.json`
 is a working example. If your agent writes some other format, convert it to this shape or add
 a `TraceSource` adapter (see [CONTRIBUTING.md](CONTRIBUTING.md)).

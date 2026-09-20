@@ -59,3 +59,34 @@ async def test_a_long_trace_refuses_a_non_jev_backend(tmp_path, monkeypatch):
     assert result.is_error
     assert "ALIBI_JUDGE_BACKEND=typesafe" in result.content[0].text
     assert "Nothing was sent" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_a_missing_key_says_so_instead_of_a_generic_error(tmp_path, monkeypatch):
+    """The likeliest first run: the plugin passes ${TYPESAFE_API_KEY} through unset."""
+    monkeypatch.setenv("ALIBI_JUDGE_BACKEND", "typesafe")
+    monkeypatch.setenv("ALIBI_MIN_TRACE_TOKENS", "0")
+
+    async with Client(build_server()) as client:
+        result = await client.call_tool("diagnose_trace", {"trace": trace_file(tmp_path)})
+    assert result.is_error
+    assert "TYPESAFE_API_KEY" in result.content[0].text
+    assert "Nothing was sent" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_an_unreadable_trace_says_what_is_wrong(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    async with Client(build_server()) as client:
+        result = await client.call_tool("diagnose_trace", {"trace": str(bad)})
+    assert result.is_error
+    assert "could not read" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_the_source_argument_is_constrained_in_the_schema():
+    async with Client(build_server()) as client:
+        tools = await client.list_tools()
+    source = tools.tools[0].input_schema["properties"]["source"]
+    assert set(source.get("enum", [])) == {"auto", "json", "claude-code", "langsmith"}

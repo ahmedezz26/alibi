@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from alibi.sources.auto import load_steps
+from alibi.sources.auto import TraceFormatError, load_steps
 
 
 def test_json_file_is_read_with_the_json_adapter(tmp_path):
@@ -35,3 +35,30 @@ def test_a_trace_id_next_to_a_directory_still_resolves(tmp_path):
     """JsonFileTraceSource resolves <dir>/<id> to <dir>/<id>.json; the guard must allow it."""
     (tmp_path / "t1.json").write_text(json.dumps([{"type": "user", "inputs": {"q": "hi"}}]))
     assert load_steps(f"{tmp_path}/t1", source="json")[0].inputs == {"q": "hi"}
+
+
+def test_the_same_form_resolves_in_the_default_auto_mode(tmp_path):
+    """auto is what the CLI and the MCP tool use: a local path must never reach LangSmith."""
+    (tmp_path / "t1.json").write_text(json.dumps([{"type": "user", "inputs": {"q": "hi"}}]))
+    assert load_steps(f"{tmp_path}/t1")[0].inputs == {"q": "hi"}
+
+
+def test_a_malformed_trace_file_raises_a_format_error(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text("{not json")
+    with pytest.raises(TraceFormatError, match="could not read"):
+        load_steps(str(p))
+
+
+def test_a_wrong_shaped_trace_file_raises_a_format_error(tmp_path):
+    p = tmp_path / "obj.json"
+    p.write_text(json.dumps({"type": "user"}))
+    with pytest.raises(TraceFormatError):
+        load_steps(str(p))
+
+
+def test_a_bad_timestamp_raises_a_format_error(tmp_path):
+    p = tmp_path / "ts.json"
+    p.write_text(json.dumps([{"type": "user", "timestamp": "not-a-date", "inputs": {}}]))
+    with pytest.raises(TraceFormatError):
+        load_steps(str(p))

@@ -65,6 +65,28 @@ def test_the_ceiling_flag_is_named_after_its_setting(tmp_path, capsys):
     assert "ceiling" in capsys.readouterr().out
 
 
+def test_the_backend_message_names_every_variable_it_needs(tmp_path, capsys, monkeypatch):
+    """Following the message must be enough: the paid-model guard is the third variable."""
+    monkeypatch.setenv("ALIBI_JUDGE_BACKEND", "openrouter")
+    assert cli.main(["diagnose", trace_file(tmp_path), "--min-trace-tokens", "0"]) == 2
+    err = capsys.readouterr().err
+    for var in ("ALIBI_JUDGE_BACKEND=typesafe", "TYPESAFE_API_KEY", "ALIBI_ALLOW_PAID_MODELS=1"):
+        assert var in err
+
+
+def test_a_missing_key_is_a_clean_error(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("ALIBI_JUDGE_BACKEND", "typesafe")
+    assert cli.main(["diagnose", trace_file(tmp_path), "--min-trace-tokens", "0"]) == 2
+    assert "TYPESAFE_API_KEY" in capsys.readouterr().err
+
+
+def test_a_bad_timestamp_is_a_clean_error(tmp_path, capsys):
+    p = tmp_path / "ts.json"
+    p.write_text(json.dumps([{"type": "user", "timestamp": "not-a-date", "inputs": {}}]))
+    assert cli.main(["diagnose", str(p)]) == 2
+    assert "could not read" in capsys.readouterr().err
+
+
 def test_module_entry_point_runs(tmp_path):
     """`python -m alibi.cli` must define every handler before main() dispatches."""
     out = subprocess.run(

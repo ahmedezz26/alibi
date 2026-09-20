@@ -14,6 +14,7 @@ from alibi.drift import DEFAULT_BASELINE, DEFAULT_H, DEFAULT_K, cusum_path, dete
 from alibi.forward import forward_pass
 from alibi.judges import make_judge
 from alibi.sources import TraceSource
+from alibi.sources.auto import SOURCES
 
 
 def _make_source(args: argparse.Namespace) -> TraceSource:
@@ -123,9 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         "diagnose", help="V2 + Jev: the 3 steps of a long agent trace to read first"
     )
     diag.add_argument("trace", help="path to a .json / Claude Code .jsonl trace, or a LangSmith id")
-    diag.add_argument(
-        "--source", choices=["auto", "json", "claude-code", "langsmith"], default="auto"
-    )
+    diag.add_argument("--source", choices=list(SOURCES), default="auto")
     diag.add_argument("--project", help="LangSmith project name")
     diag.add_argument(
         "--min-trace-tokens",
@@ -196,8 +195,8 @@ def main(argv: list[str] | None = None) -> int:
 def _diagnose(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
-    from alibi.localize import diagnose, needs_judge
-    from alibi.sources.auto import load_steps
+    from alibi.localize import diagnose, needs_judge, unsupported_backend
+    from alibi.sources.auto import TraceFormatError, load_steps
 
     settings = load_settings()
     if args.min_tokens is not None:
@@ -209,19 +208,20 @@ def _diagnose(args: argparse.Namespace) -> int:
     except FileNotFoundError as e:
         print(e, file=sys.stderr)
         return 2
-    except (OSError, json.JSONDecodeError, TypeError, AttributeError) as e:
-        print(f"could not read {args.trace}: {e}", file=sys.stderr)
+    except (TraceFormatError, OSError) as e:
+        print(e, file=sys.stderr)
         return 2
     judge = None
     if needs_judge(steps, settings):
-        if settings.judge_backend != "typesafe":
-            print(
-                "Alibi needs the Jev backend: set ALIBI_JUDGE_BACKEND=typesafe and "
-                "TYPESAFE_API_KEY",
-                file=sys.stderr,
-            )
+        problem = unsupported_backend(settings)
+        if problem:
+            print(problem, file=sys.stderr)
             return 2
-        judge = make_judge(settings)
+        try:
+            judge = make_judge(settings)
+        except RuntimeError as e:  # a missing key or the paid-model guard
+            print(e, file=sys.stderr)
+            return 2
     d = diagnose(steps, judge, settings)
     if args.json:
         print(d.model_dump_json(indent=2))
