@@ -82,6 +82,7 @@ Keep the detailed state in **`docs/research-log.md`**: update its TL;DR, results
 - 2026-09-19: **Real-failure test PASSED** on the locked TrajErrBench SWE-Bench Pro set (56 long real coding failures): V2 (method + Jev: gap card + checks + `step_plus_check` + `earliest_near_best`) got exact 16% vs 0% for a DeepSeek single call (p=0.004), ±3 21% vs 2%. The finalist round (V3/V3b) is not adopted. Details are in `docs/research-log.md`.
 - 2026-09-19: V3–V8 (finalists, sensors, blame questions, DeepSeek picker, router + commit points, look back from the end) all failed to beat V2 on dev. **LongRCA held-out (90 real SWE failures, median 120K tokens): V2 exact 7.8% vs DeepSeek whole-trace 0% (p=0.016), but below the published 13.2%, so it FAILED the pre-agreed bar.** Details are in `docs/research-log.md`.
 - 2026-09-20: **shipped.** V2 packaged as `alibi diagnose`, the `alibi-mcp` server and a Claude Code plugin, all through `alibi.localize.diagnose()` behind a 50K-token gate; repo public at https://github.com/ahmedezz26/alibi (MIT). Details are in `docs/research-log.md`.
+- 2026-09-20: **0.1.1-0.1.4 on PyPI**, four review rounds after the first release; the fixes are about spend, privacy and clean errors, not the method, which is byte-identical to the measured version. `tests/test_product_matches_research.py` now fails if the product's V2 configuration stops matching the benchmarks'. Details are in `docs/research-log.md`.
 
 ## Glossary
 
