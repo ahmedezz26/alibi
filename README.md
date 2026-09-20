@@ -35,7 +35,7 @@ flowchart LR
 
 | Stage | What happens | Driver-assistance analogue |
 |---|---|---|
-| Chapters | Token windows of a fixed size, with overlap, read one at a time. The size is `ALIBI_JUDGE_WINDOW_TOKENS`; it defaults to 10,000, which is what every measurement below used | Measurement frames |
+| Chapters | Overlapping token windows, read one at a time. The size is `ALIBI_JUDGE_WINDOW_TOKENS`, default 10,000 - what every measurement below used | Measurement frames |
 | Forward filter | Jev rates health and 4 warning signs per chapter; a memory card of numbers carries state forward | Recursive filter (predict + update) |
 | CUSUM | Accumulates health drift; the first alarm marks the failure chapter | Fault detection |
 | Look-back | Re-reads the alarm chapter and every earlier one in parallel, with hindsight | Fixed-interval (RTS-style) smoothing |
@@ -113,71 +113,39 @@ suspect back to the handoff instruction between agents.
 
 ## Install and run
 
-### In Claude Code (the plugin)
+**Claude Code.**
 
     /plugin marketplace add ahmedezz26/alibi
     /plugin install alibi@alibi
 
-Then set one variable in the shell you start Claude Code from:
+Set `TYPESAFE_API_KEY` in the shell you start Claude Code from. The plugin does the rest: it
+starts the MCP server with `uvx` and sets the other two variables itself. Then ask it *"why
+did my last session go wrong?"*
 
-    export TYPESAFE_API_KEY=...          # a key from TypeSafe AI
-
-That is the whole setup. The plugin launches the MCP server itself with `uvx`, and sets the
-other two variables (`ALIBI_JUDGE_BACKEND=typesafe`, `ALIBI_ALLOW_PAID_MODELS=1`) for you.
-Ask Claude Code *"why did my last session go wrong?"* and it finds the session file, calls
-the tool, and reads the suspect steps back to you.
-
-### On the command line
-
-The PyPI distribution is `agent-alibi`; the import package is `alibi`.
-
-**1. Install it.**
+**Command line.** The PyPI distribution is `agent-alibi`; the import package is `alibi`.
 
     uv tool install agent-alibi
+    export ALIBI_JUDGE_BACKEND=typesafe ALIBI_ALLOW_PAID_MODELS=1 TYPESAFE_API_KEY=...
+    alibi diagnose path/to/trace.json
 
-Or run it without installing anything: `uvx --from agent-alibi alibi diagnose ...`
+All three variables are required - Jev is a paid API and `ALIBI_ALLOW_PAID_MODELS` is the
+spend guard. Miss one and the run stops at exit 2 naming what is missing, having sent
+nothing. A `.env` beside the directory you run from is read for any of them you did not set.
 
-**2. Check it runs, before any key and before any spending.** Any short trace is answered
-locally, so this costs nothing and needs nothing configured:
+Short traces need no key at all, so you can check the install before you have one:
 
     $ printf '[{"type":"user","inputs":{"q":"hi"}}]' > /tmp/t.json
     $ alibi diagnose /tmp/t.json
     Trace is 9 tokens, under the 50,000-token threshold: a single direct read is enough;
     Alibi adds value on long traces.
 
-**3. Set three variables.** Jev is a paid API, and all three are required before Alibi will
-call it:
-
-    export ALIBI_JUDGE_BACKEND=typesafe   # Jev is the only sensor the method was measured with
-    export ALIBI_ALLOW_PAID_MODELS=1      # the spend guard, off by default
-    export TYPESAFE_API_KEY=...           # your key from TypeSafe AI
-
-Miss one and the run stops at exit code 2, naming what is missing, with nothing sent and
-nothing spent:
-
-    $ alibi diagnose long-trace.json          # with none of them set
-    Alibi needs the Jev backend: set ALIBI_JUDGE_BACKEND=typesafe, TYPESAFE_API_KEY and
-    ALIBI_ALLOW_PAID_MODELS=1. Nothing was sent.
-
-    $ alibi diagnose long-trace.json          # with the key missing
-    TYPESAFE_API_KEY is not set (see .env.example). Nothing was sent.
-
-These variables can also live in a `.env` file beside the project you run from. A shell
-variable wins over the file, but a variable you never set in the shell will be taken from
-it - so if a run spends when you expected it to refuse, check for a `.env`.
-
-**4. Diagnose one trace.** One run, one trace:
-
-    alibi diagnose path/to/trace.json
-
 ## What you can point it at
 
-One trace per run. Three kinds are understood, and `--source auto` (the default) picks by
-file extension.
+One trace per run. `--source auto`, the default, picks by file extension.
 
-**A JSON trace file** (`.json`) - a list of steps, oldest first. Every field is optional, but
-include `outputs` and `error` where you have them: the judge reads the whole rendered step, and
-a misread observation or an unfixed error is most of the signal the method looks for.
+**A JSON file** (`.json`) - a list of steps, oldest first. Every field is optional, but include
+`outputs` and `error` where you have them: a misread observation or an unfixed error is most of
+the signal the method looks for.
 
 ```json
 [
@@ -189,71 +157,49 @@ a misread observation or an unfixed error is most of the signal the method looks
 ]
 ```
 
-Recognised keys: `type` (free text: `llm`, `tool`, `assistant`, `user`, ...), `name`,
-`inputs`, `outputs`, `error`, `step_id`, `timestamp` (ISO 8601 if present - a value
-`datetime.fromisoformat` cannot parse is rejected with exit code 2). Steps are numbered by
-position, so `step 74` in the output is the 75th entry in the file. `examples/sample_trace.json`
-is a working example. If your agent writes some other format, convert it to this shape or add
-a `TraceSource` adapter (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+Other keys read: `name`, `step_id`, `timestamp` (ISO 8601; an unparseable one is rejected with
+exit 2). Steps are numbered by position, so `step 74` is the 75th entry in the file.
+`examples/sample_trace.json` is a working example. For any other format, convert it to this
+shape or add a `TraceSource` adapter (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
-**A Claude Code session** (`.jsonl`) - the transcripts under
-`~/.claude/projects/<project>/<session-id>.jsonl`, where `<project>` is your project's path
-with slashes, underscores and dots turned into dashes (`/Users/me/LLM_projects/app` becomes
-`-Users-me-LLM-projects-app`). To diagnose the most recent session of the project you are in:
+**A Claude Code session** (`.jsonl`) - the transcripts under `~/.claude/projects/`, in a folder
+named after your project path with `/`, `_` and `.` turned into `-`:
 
     alibi diagnose ~/.claude/projects/-Users-me-LLM-projects-app/<session-id>.jsonl
 
-To pick the most recent session of the project you are standing in, without looking the
-name up (the substitution turns `/`, `_` and `.` into `-`, which is the same rule):
+For the most recent session of the project you are standing in, without looking the name up:
 
     alibi diagnose "$(ls -t ~/.claude/projects/"${PWD//[\/_.]/-}"/*.jsonl | head -1)"
 
-A working session is often longer than the 250,000-token ceiling, and is then refused with
-its cost rather than analysed:
+A real working session is often past the 250K ceiling, and is then refused with its cost
+rather than analysed. If the estimate is fine, say so: `--max-trace-tokens 400000`. Parsing is
+best effort, since the format is internal to Claude Code: assistant text, tool calls and tool
+results become steps, and thinking blocks are skipped.
 
-    Trace is 333,562 tokens, over the 250,000-token ceiling: analysing it would cost about
-    $0.03 of Jev. Raise ALIBI_MAX_TRACE_TOKENS to analyse it anyway.
-
-That is the ceiling doing its job. If the estimate is acceptable, say so explicitly:
-
-    alibi diagnose <session>.jsonl --max-trace-tokens 400000
-
-Parsing is best effort: the format is internal to Claude Code and may change. Assistant text,
-tool calls and tool results become steps; thinking blocks are skipped.
-
-**A LangSmith trace** - pass the trace id and the project, with `LANGSMITH_API_KEY` set:
+**A LangSmith trace** - the trace id and the project, with `LANGSMITH_API_KEY` set:
 
     alibi diagnose <trace-id> --source langsmith --project "my-project"
 
-There is no folder mode: Alibi diagnoses one run at a time, because the method is a filter
-over a single time series. To sweep a directory, loop:
+There is no folder mode: the method is a filter over one time series. To sweep a directory,
+loop:
 
     for f in traces/*.json; do alibi diagnose "$f" --json > "${f%.json}.diagnosis.json"; done
 
 ## Reading the result
 
-    Read these 3 steps first, in order.
-    80,778 tokens, 10 chapters, alarm at chapter 6; 17 Jev calls, 35 s, $0.0096
-    1. step 74 (assistant), chapter 6, score 0.277
-       '...'
+In the output above:
 
-- **chapters** - how many windows the trace was split into. Each is `ALIBI_JUDGE_WINDOW_TOKENS` tokens (default 10,000), so a 80K-token trace is about 10.
 - **alarm at chapter N** - where CUSUM first saw the agent's health break down. The cause is
-  usually at or before it, which is why the look-back starts there. `alarm at chapter None`
-  means no alarm fired and the run's ending was used as the anchor instead.
+  usually at or before it, which is why the look-back starts there. `None` means no alarm fired
+  and the run's ending was used as the anchor instead.
 - **score** - fused evidence for that step, not a probability. Only the ordering is meaningful.
 - **steps** are 0-based positions in the trace you passed in.
 
-`--json` prints the same thing as a JSON object (`gated`, `message`, `trace_tokens`,
-`n_steps`, `n_chapters`, `alarm_chapter`, `anchor`, `suspects[]`, `judge_calls`,
-`judge_seconds`, `cost_usd`) for piping into something else. The three cost fields are null,
-not zero, if the judge in use keeps no call log - unknown rather than free.
+`--json` prints the same result as an object, for piping into something else.
 
-Exit codes: **0** on success, including a gated trace. **2** if the trace file is missing or
-unreadable, the Jev backend is not configured, or a setting is rejected - 2 always means no
-judge was built, so nothing was sent and nothing was spent. **3** if the run failed once the
-judge had started reading the trace. The message says how many Jev calls completed and are
-billed; at zero, nothing is billed and the first request may never have been sent.
+Exit codes: **0** on success, a gated trace included. **2** for anything refused before a judge
+was built, which always means nothing was sent and nothing was spent. **3** if the run failed
+once the judge had started reading, where the message says how many calls were billed.
 
 ## The two gates, and what they cost
 
