@@ -23,15 +23,10 @@ of cases; Alibi found it in 16% and 7.8%, and points to the right neighbourhood 
 
 ## How it works
 
-```mermaid
-flowchart LR
-  A[Trace] --> B["Chapters of N tokens<br/>(default N = 10,000)"]
-  B --> C[Forward filter:<br/>Jev rates each chapter]
-  C -->|memory card| C
-  C --> D[CUSUM alarm<br/>on health]
-  D --> E[Look back from the alarm:<br/>chapter + per-step evidence]
-  E --> F[Top 3 steps to read,<br/>earliest strong suspect first]
-```
+<p align="center">
+  <img src="docs/assets/alibi-pipeline.svg" width="900"
+       alt="A 120K-token trace cut into 8 chapters. A forward filter scores each chapter's health, carrying a memory card. CUSUM accumulates until it crosses h = 0.5 and raises an alarm at chapter 6. The backward pass re-reads chapters 1 to 6 with hindsight and puts the cause at chapter 3, three chapters before anyone would have noticed.">
+</p>
 
 | Stage | What happens | Driver-assistance analogue |
 |---|---|---|

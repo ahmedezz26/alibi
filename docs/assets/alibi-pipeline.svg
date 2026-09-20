@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560" role="img"
+     aria-label="Alibi pipeline: a trace is cut into chapters, a forward filter scores each chapter's health carrying a memory card, CUSUM accumulates until an alarm fires at chapter 6, then a backward pass re-reads earlier chapters and finds the root cause back at chapter 3 — three chapters before anything looked wrong.">
+
+  <rect x="0" y="0" width="900" height="560" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="arL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0F172A"/>
+    </marker>
+    <marker id="arS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/>
+    </marker>
+  </defs>
+
+  <text x="36" y="34" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#0F172A">How Alibi finds the step that caused the failure</text>
+  <text x="36" y="54" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#64748B">one 120K-token trace · 8 chapters · the judge never sees more than one chapter at a time</text>
+
+  <!-- vertical guide lines -->
+  <line x1="355" y1="76" x2="355" y2="500" stroke="#F59E0B" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.65"/>
+  <line x1="625" y1="76" x2="625" y2="500" stroke="#EF4444" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.65"/>
+
+  <text x="355" y="70" font-family="Arial, Helvetica, sans-serif" font-size="10.5" font-weight="700" fill="#B45309" text-anchor="middle">where it started</text>
+  <text x="625" y="70" font-family="Arial, Helvetica, sans-serif" font-size="10.5" font-weight="700" fill="#DC2626" text-anchor="middle">where you'd notice</text>
+
+  <!-- row labels -->
+  <g font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="#94A3B8" text-anchor="end" letter-spacing="1">
+    <text x="112" y="100">TRACE</text>
+    <text x="112" y="156">FORWARD</text>
+    <text x="112" y="228">HEALTH</text>
+    <text x="112" y="330">CUSUM</text>
+    <text x="112" y="410">LOOK BACK</text>
+  </g>
+
+  <!-- ROW 1: chapters -->
+  <g>
+    <rect x="130" y="78" width="86" height="34" rx="4" fill="#F1F5F9" stroke="#CBD5E1"/>
+    <rect x="220" y="78" width="86" height="34" rx="4" fill="#F1F5F9" stroke="#CBD5E1"/>
+    <rect x="310" y="78" width="86" height="34" rx="4" fill="#FEF3C7" stroke="#F59E0B"/>
+    <rect x="400" y="78" width="86" height="34" rx="4" fill="#F1F5F9" stroke="#CBD5E1"/>
+    <rect x="490" y="78" width="86" height="34" rx="4" fill="#F1F5F9" stroke="#CBD5E1"/>
+    <rect x="580" y="78" width="86" height="34" rx="4" fill="#FEE2E2" stroke="#EF4444"/>
+    <rect x="670" y="78" width="86" height="34" rx="4" fill="#F1F5F9" stroke="#CBD5E1"/>
+    <rect x="760" y="78" width="86" height="34" rx="4" fill="#F1F5F9" stroke="#CBD5E1"/>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#475569" text-anchor="middle">
+    <text x="173" y="100">C1</text><text x="263" y="100">C2</text><text x="353" y="100">C3</text><text x="443" y="100">C4</text>
+    <text x="533" y="100">C5</text><text x="623" y="100">C6</text><text x="713" y="100">C7</text><text x="803" y="100">C8</text>
+  </g>
+  <text x="130" y="128" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#94A3B8">10K tokens each, 1.25K overlap so a failure never falls between two chapters</text>
+
+  <!-- ROW 2: forward pass with memory card -->
+  <g stroke="#CBD5E1" stroke-width="1">
+    <line x1="173" y1="112" x2="173" y2="158"/><line x1="263" y1="112" x2="263" y2="158"/>
+    <line x1="353" y1="112" x2="353" y2="158"/><line x1="443" y1="112" x2="443" y2="158"/>
+    <line x1="533" y1="112" x2="533" y2="158"/><line x1="623" y1="112" x2="623" y2="158"/>
+    <line x1="713" y1="112" x2="713" y2="158"/><line x1="803" y1="112" x2="803" y2="158"/>
+  </g>
+  <g fill="none" stroke="#94A3B8" stroke-width="1.4" marker-end="url(#arS)">
+    <path d="M173,158 Q218,142 259,156"/><path d="M263,158 Q308,142 349,156"/>
+    <path d="M353,158 Q398,142 439,156"/><path d="M443,158 Q488,142 529,156"/>
+    <path d="M533,158 Q578,142 619,156"/><path d="M623,158 Q668,142 709,156"/>
+    <path d="M713,158 Q758,142 799,156"/>
+  </g>
+  <text x="488" y="180" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#64748B" text-anchor="middle">memory card: previous health + 4 warning-sign probabilities carried into the next read</text>
+
+  <!-- ROW 3: health bars -->
+  <line x1="130" y1="250" x2="850" y2="250" stroke="#CBD5E1" stroke-width="1"/>
+  <g fill="#CBD5E1">
+    <rect x="158" y="244" width="30" height="6"/><rect x="248" y="241" width="30" height="9"/>
+    <rect x="338" y="232" width="30" height="18"/><rect x="428" y="229" width="30" height="21"/>
+    <rect x="518" y="226" width="30" height="24"/><rect x="608" y="214" width="30" height="36"/>
+    <rect x="698" y="205" width="30" height="45"/><rect x="788" y="199" width="30" height="51"/>
+  </g>
+  <text x="130" y="268" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#94A3B8">the judge rates each chapter 0&#8211;1. note C3 barely moves &#8212; a quiet cause looks fine on its own</text>
+
+  <!-- ROW 4: CUSUM -->
+  <line x1="130" y1="355" x2="850" y2="355" stroke="#CBD5E1" stroke-width="1"/>
+  <line x1="130" y1="320" x2="850" y2="320" stroke="#EF4444" stroke-width="1.2" stroke-dasharray="5 4" opacity="0.8"/>
+  <text x="846" y="316" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#DC2626" text-anchor="end">h = 0.5  alarm threshold</text>
+
+  <polyline points="175,355 265,355 355,348 445,338 535,323 625,296" fill="none" stroke="#334155" stroke-width="2.2" stroke-linejoin="round"/>
+  <circle cx="625" cy="296" r="5" fill="#EF4444"/>
+  <circle cx="265" cy="355" r="4" fill="#F59E0B"/>
+
+  <text x="292" y="374" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#B45309">sum leaves zero here &#8594; onset estimate, free from the math</text>
+  <text x="130" y="392" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#94A3B8">S = max(0, S&#8331; + health &#8722; 0.2). small drifts accumulate; one noisy chapter decays away</text>
+
+  <!-- ROW 5: backward pass -->
+  <line x1="625" y1="412" x2="152" y2="412" stroke="#0F172A" stroke-width="2.4" marker-end="url(#arL)"/>
+  <text x="640" y="416" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#0F172A">re-read C1&#8211;C6 with hindsight</text>
+
+  <g font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#64748B" text-anchor="middle">
+    <text x="173" y="438">0.12</text><text x="263" y="438">0.18</text>
+    <text x="443" y="438">0.44</text><text x="533" y="438">0.30</text><text x="623" y="438">0.35</text>
+  </g>
+  <rect x="332" y="426" width="42" height="17" rx="4" fill="#F59E0B"/>
+  <text x="353" y="438" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#FFFFFF" text-anchor="middle">0.71</text>
+  <text x="760" y="438" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#CBD5E1" text-anchor="middle">not examined</text>
+  <text x="130" y="458" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#94A3B8">P(the cause is in this chapter), asked knowing how the run ended. anything after the alarm is never looked at &#8212; a known gap</text>
+
+  <!-- ROW 6: the gap -->
+  <line x1="355" y1="488" x2="625" y2="488" stroke="#0F172A" stroke-width="1.6"/>
+  <line x1="355" y1="482" x2="355" y2="494" stroke="#0F172A" stroke-width="1.6"/>
+  <line x1="625" y1="482" x2="625" y2="494" stroke="#0F172A" stroke-width="1.6"/>
+  <text x="490" y="512" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#0F172A" text-anchor="middle">detection delay &#8212; 3 chapters</text>
+  <text x="490" y="530" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#64748B" text-anchor="middle">the alarm tells you the run broke. the backward pass tells you where it went wrong.</text>
+</svg>
