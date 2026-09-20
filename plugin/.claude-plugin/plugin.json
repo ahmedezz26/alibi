@@ -1,7 +1,7 @@
 {
   "name": "alibi",
   "description": "We check whether your agent has an alibi for what it did. Points to the 3 steps of a long agent trace to read first.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "author": { "name": "ahmedezz26", "url": "https://github.com/ahmedezz26" },
   "homepage": "https://github.com/ahmedezz26/alibi",
   "repository": "https://github.com/ahmedezz26/alibi",
