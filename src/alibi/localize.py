@@ -8,11 +8,13 @@ is likely to have agreed to. In both cases no judge call is made.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pydantic import BaseModel, Field
 
 from alibi.backward import backward_pass_typed, combine_scores, suspect_probs
 from alibi.chunking import chunk_trace, render_step, trace_tokens
-from alibi.config import Settings
+from alibi.config import Settings, load_settings
 from alibi.drift import detect_drift
 from alibi.forward import forward_pass_typed
 from alibi.judges import Judge
@@ -47,13 +49,24 @@ def unsupported_backend(settings: Settings) -> str | None:
     return None
 
 
-def needs_judge(steps: list[Step], settings: Settings) -> bool:
-    """Whether ``diagnose`` will call the judge for this trace: the exact complement of the
-    gates below. Callers build a judge only when this is true, so a refusal costs nothing and
-    needs no API key. Keep it in step with ``diagnose``."""
+def _gate(steps: list[Step], settings: Settings) -> tuple[int, str | None]:
+    """The trace's size, and why it will not be analysed (None when it will be). Every
+    refusal costs nothing: no judge is built and nothing leaves the machine."""
+    tokens = trace_tokens(steps)
     if not steps:
-        return False
-    return settings.min_trace_tokens <= trace_tokens(steps) <= settings.max_trace_tokens
+        return tokens, "The trace has no steps to analyse."
+    if tokens < settings.min_trace_tokens:
+        return tokens, (
+            f"Trace is {tokens:,} tokens, under the {settings.min_trace_tokens:,}-token "
+            "threshold: a single direct read is enough; Alibi adds value on long traces."
+        )
+    if tokens > settings.max_trace_tokens:
+        return tokens, (
+            f"Trace is {tokens:,} tokens, over the {settings.max_trace_tokens:,}-token "
+            f"ceiling: analysing it would cost about ${_estimated_cost(tokens, settings):.2f} "
+            "of Jev. Raise ALIBI_MAX_TRACE_TOKENS to analyse it anyway."
+        )
+    return tokens, None
 
 
 class Suspect(BaseModel):
@@ -84,38 +97,23 @@ class Diagnosis(BaseModel):
     cost_usd: float = 0.0
 
 
-def diagnose(steps: list[Step], judge: Judge | None, settings: Settings) -> Diagnosis:
-    tokens = trace_tokens(steps)
-    if not steps:
-        return Diagnosis(
-            gated=True,
-            message="The trace has no steps to analyse.",
-            trace_tokens=tokens,
-            n_steps=0,
-        )
-    if tokens < settings.min_trace_tokens:
-        return Diagnosis(
-            gated=True,
-            message=(
-                f"Trace is {tokens:,} tokens, under the {settings.min_trace_tokens:,}-token "
-                "threshold: a single direct read is enough; Alibi adds value on long traces."
-            ),
-            trace_tokens=tokens,
-            n_steps=len(steps),
-        )
-    if tokens > settings.max_trace_tokens:
-        return Diagnosis(
-            gated=True,
-            message=(
-                f"Trace is {tokens:,} tokens, over the {settings.max_trace_tokens:,}-token "
-                f"ceiling: analysing it would cost about ${_estimated_cost(tokens, settings):.2f} "
-                "of Jev. Raise ALIBI_MAX_TRACE_TOKENS to analyse it anyway."
-            ),
-            trace_tokens=tokens,
-            n_steps=len(steps),
-        )
+def diagnose(
+    steps: list[Step],
+    judge: Judge | None = None,
+    settings: Settings | None = None,
+    judge_factory: Callable[[], Judge] | None = None,
+) -> Diagnosis:
+    """Localize the failure in one trace. ``judge_factory`` is called only if the trace is
+    actually going to be analysed, so a caller can pass one without building a paid client
+    (or requiring a key) for a trace that will be refused."""
+    settings = settings or load_settings()
+    tokens, refusal = _gate(steps, settings)
+    if refusal is not None:
+        return Diagnosis(gated=True, message=refusal, trace_tokens=tokens, n_steps=len(steps))
     if judge is None:
-        raise ValueError("a typed (Jev) judge is required for traces above the length gate")
+        if judge_factory is None:
+            raise ValueError("a typed (Jev) judge is required for traces above the length gate")
+        judge = judge_factory()
     window = settings.judge_window_tokens
     chunks = chunk_trace(steps, window, window // 8)
     fwd = forward_pass_typed(judge, chunks, steps)

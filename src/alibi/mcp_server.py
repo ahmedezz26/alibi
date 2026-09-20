@@ -14,7 +14,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from alibi.config import load_settings
 from alibi.judges import Judge, make_judge
-from alibi.localize import Diagnosis, diagnose, needs_judge, unsupported_backend
+from alibi.localize import Diagnosis, diagnose, unsupported_backend
 from alibi.sources.auto import TraceFormatError, load_steps
 
 Source = Literal["auto", "json", "claude-code", "langsmith"]
@@ -38,18 +38,20 @@ def build_server(judge_factory: Callable[[], Judge] | None = None) -> MCPServer:
             steps = load_steps(trace, source, project)
         except (FileNotFoundError, TraceFormatError, OSError) as e:
             raise ToolError(str(e)) from e
-        judge = None
-        if needs_judge(steps, settings):
+
+        def build_judge() -> Judge:
             # Without this the trace would go to whatever backend the environment names,
             # including free endpoints that may log prompts.
             problem = unsupported_backend(settings)
             if problem:
                 raise ToolError(problem)
             try:
-                judge = (judge_factory or (lambda: make_judge(settings)))()
+                return (judge_factory or (lambda: make_judge(settings)))()
             except RuntimeError as e:  # a missing key or the paid-model guard
                 raise ToolError(f"{e}. Nothing was sent.") from e
-        return diagnose(steps, judge, settings)
+
+        # The factory runs only if this trace is analysed, so a refusal needs no key.
+        return diagnose(steps, settings=settings, judge_factory=build_judge)
 
     return server
 

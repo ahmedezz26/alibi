@@ -12,9 +12,13 @@ from alibi.chunking import chunk_trace
 from alibi.config import load_settings
 from alibi.drift import DEFAULT_BASELINE, DEFAULT_H, DEFAULT_K, cusum_path, detect_drift
 from alibi.forward import forward_pass
-from alibi.judges import make_judge
+from alibi.judges import Judge, make_judge
 from alibi.sources import TraceSource
 from alibi.sources.auto import SOURCES
+
+
+class JudgeUnavailable(RuntimeError):
+    """The judge cannot be built: the wrong backend, or a missing key."""
 
 
 def _make_source(args: argparse.Namespace) -> TraceSource:
@@ -127,18 +131,10 @@ def main(argv: list[str] | None = None) -> int:
     diag.add_argument("--source", choices=list(SOURCES), default="auto")
     diag.add_argument("--project", help="LangSmith project name")
     diag.add_argument(
-        "--min-trace-tokens",
-        "--min-tokens",
-        dest="min_tokens",
-        type=int,
-        help="override the length gate (ALIBI_MIN_TRACE_TOKENS)",
+        "--min-trace-tokens", type=int, help="override the length gate (ALIBI_MIN_TRACE_TOKENS)"
     )
     diag.add_argument(
-        "--max-trace-tokens",
-        "--max-tokens",
-        dest="max_tokens",
-        type=int,
-        help="override the cost ceiling (ALIBI_MAX_TRACE_TOKENS)",
+        "--max-trace-tokens", type=int, help="override the cost ceiling (ALIBI_MAX_TRACE_TOKENS)"
     )
     diag.add_argument("--json", action="store_true", help="print the Diagnosis as JSON")
 
@@ -195,14 +191,14 @@ def main(argv: list[str] | None = None) -> int:
 def _diagnose(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
-    from alibi.localize import diagnose, needs_judge, unsupported_backend
+    from alibi.localize import diagnose, unsupported_backend
     from alibi.sources.auto import TraceFormatError, load_steps
 
     settings = load_settings()
-    if args.min_tokens is not None:
-        settings = replace(settings, min_trace_tokens=args.min_tokens)
-    if args.max_tokens is not None:
-        settings = replace(settings, max_trace_tokens=args.max_tokens)
+    if args.min_trace_tokens is not None:
+        settings = replace(settings, min_trace_tokens=args.min_trace_tokens)
+    if args.max_trace_tokens is not None:
+        settings = replace(settings, max_trace_tokens=args.max_trace_tokens)
     try:
         steps = load_steps(args.trace, args.source, args.project)
     except FileNotFoundError as e:
@@ -211,18 +207,19 @@ def _diagnose(args: argparse.Namespace) -> int:
     except (TraceFormatError, OSError) as e:
         print(e, file=sys.stderr)
         return 2
-    judge = None
-    if needs_judge(steps, settings):
+
+    def judge_factory() -> Judge:
         problem = unsupported_backend(settings)
         if problem:
-            print(problem, file=sys.stderr)
-            return 2
-        try:
-            judge = make_judge(settings)
-        except RuntimeError as e:  # a missing key or the paid-model guard
-            print(e, file=sys.stderr)
-            return 2
-    d = diagnose(steps, judge, settings)
+            raise JudgeUnavailable(problem)
+        return make_judge(settings)
+
+    try:
+        # The factory runs only if this trace is actually analysed, so a refusal needs no key.
+        d = diagnose(steps, settings=settings, judge_factory=judge_factory)
+    except (JudgeUnavailable, RuntimeError) as e:
+        print(e, file=sys.stderr)
+        return 2
     if args.json:
         print(d.model_dump_json(indent=2))
         return 0
