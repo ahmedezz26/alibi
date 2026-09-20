@@ -17,7 +17,7 @@ fault, then smooth backward to the moment it began. The only sensor is Jev, Type
 System One model, which answers with calibrated probabilities instead of text.
 
 It is built for long traces, where reading everything at once breaks down: on real coding
-failures of 59K to 120K tokens, a single whole-trace read found the root-cause step in 0%
+failures of 57K to 120K tokens, a single whole-trace read found the root-cause step in 0%
 of cases; Alibi found it in 16% and 7.8%, and points to the right neighbourhood (within
 3 steps) in 21% and 17%.
 
@@ -25,7 +25,7 @@ of cases; Alibi found it in 16% and 7.8%, and points to the right neighbourhood 
 
 ```mermaid
 flowchart LR
-  A[Trace] --> B[10K-token chapters]
+  A[Trace] --> B["Chapters of N tokens<br/>(default N = 10,000)"]
   B --> C[Forward filter:<br/>Jev rates each chapter]
   C -->|memory card| C
   C --> D[CUSUM alarm<br/>on health]
@@ -35,7 +35,7 @@ flowchart LR
 
 | Stage | What happens | Driver-assistance analogue |
 |---|---|---|
-| Chapters | 10K-token windows with overlap, read one at a time | Measurement frames |
+| Chapters | Token windows of a fixed size, with overlap, read one at a time. The size is `ALIBI_JUDGE_WINDOW_TOKENS`; it defaults to 10,000, which is what every measurement below used | Measurement frames |
 | Forward filter | Jev rates health and 4 warning signs per chapter; a memory card of numbers carries state forward | Recursive filter (predict + update) |
 | CUSUM | Accumulates health drift; the first alarm marks the failure chapter | Fault detection |
 | Look-back | Re-reads the alarm chapter and every earlier one in parallel, with hindsight | Fixed-interval (RTS-style) smoothing |
@@ -75,7 +75,7 @@ Locked test sets, each run once against a pass bar written down beforehand:
 
 | Test set | Traces | Median length | Alibi exact step | Alibi within 3 steps | Whole-trace read, exact |
 |---|---|---|---|---|---|
-| TrajErrBench SWE-Bench Pro (real coding failures) | 56 | 59K tokens | 16% | 21% | 0% (p = 0.004) |
+| TrajErrBench SWE-Bench Pro (real coding failures) | 56 | 57K tokens | 16% | 21% | 0% (p = 0.004) |
 | LongRCA SWE-bench Pro (real coding failures) | 90 | 120K tokens | 7.8% | 16.7% | 0% (p = 0.016) |
 | LongRCA WebArena (real web-task failures) | 48 | 38K tokens | 12.5% | 20.8% | 16.9% published (no clear difference) |
 
@@ -107,29 +107,68 @@ suspect back to the handoff instruction between agents.
 - Each chapter is one Jev call, and chapters are judged in parallel on the way back. A
   38K-token trace is 4.6 chapters and 15 seconds of judge time; a 120K-token trace is
   17 chapters and about 48 seconds. No reasoning tokens are generated.
-- Cost scales with trace length: about $0.10 per million trace tokens at Jev's price of
-  $0.042 per million input tokens (roughly $0.01 for a 100K-token trace).
+- Cost scales with trace length: about $0.08 per million trace tokens at Jev's price of
+  $0.042 per million input tokens, since every token is read about twice (forward, then the
+  look-back). That is roughly $0.01 for a 100K-token trace, and $0.02 for a 250K one.
 
-## Install
+## Install and run
 
-Claude Code:
+### In Claude Code (the plugin)
 
     /plugin marketplace add ahmedezz26/alibi
     /plugin install alibi@alibi
 
-Set `TYPESAFE_API_KEY` in your environment (get a key from TypeSafe AI). The plugin starts
-the MCP server itself with `uvx`, so there is nothing else to install. Then ask Claude Code
-"why did my last session go wrong?" and it will find the session file, call the tool and
-read the suspect steps back to you.
+Then set one variable in the shell you start Claude Code from:
 
-Command line (the PyPI distribution is `agent-alibi`; the import package is `alibi`):
+    export TYPESAFE_API_KEY=...          # a key from TypeSafe AI
+
+That is the whole setup. The plugin launches the MCP server itself with `uvx`, and sets the
+other two variables (`ALIBI_JUDGE_BACKEND=typesafe`, `ALIBI_ALLOW_PAID_MODELS=1`) for you.
+Ask Claude Code *"why did my last session go wrong?"* and it finds the session file, calls
+the tool, and reads the suspect steps back to you.
+
+### On the command line
+
+The PyPI distribution is `agent-alibi`; the import package is `alibi`.
+
+**1. Install it.**
 
     uv tool install agent-alibi
-    export ALIBI_JUDGE_BACKEND=typesafe ALIBI_ALLOW_PAID_MODELS=1 TYPESAFE_API_KEY=...
-    alibi diagnose path/to/trace.json
 
-`ALIBI_ALLOW_PAID_MODELS=1` is the spend guard: Jev is a paid API, and without it the judge
-refuses to run. The plugin sets both variables for you.
+Or run it without installing anything: `uvx --from agent-alibi alibi diagnose ...`
+
+**2. Check it runs, before any key and before any spending.** Any short trace is answered
+locally, so this costs nothing and needs nothing configured:
+
+    $ printf '[{"type":"user","inputs":{"q":"hi"}}]' > /tmp/t.json
+    $ alibi diagnose /tmp/t.json
+    Trace is 9 tokens, under the 50,000-token threshold: a single direct read is enough;
+    Alibi adds value on long traces.
+
+**3. Set three variables.** Jev is a paid API, and all three are required before Alibi will
+call it:
+
+    export ALIBI_JUDGE_BACKEND=typesafe   # Jev is the only sensor the method was measured with
+    export ALIBI_ALLOW_PAID_MODELS=1      # the spend guard, off by default
+    export TYPESAFE_API_KEY=...           # your key from TypeSafe AI
+
+Miss one and the run stops at exit code 2, naming what is missing, with nothing sent and
+nothing spent:
+
+    $ alibi diagnose long-trace.json          # with none of them set
+    Alibi needs the Jev backend: set ALIBI_JUDGE_BACKEND=typesafe, TYPESAFE_API_KEY and
+    ALIBI_ALLOW_PAID_MODELS=1. Nothing was sent.
+
+    $ alibi diagnose long-trace.json          # with the key missing
+    TYPESAFE_API_KEY is not set (see .env.example). Nothing was sent.
+
+These variables can also live in a `.env` file beside the project you run from. A shell
+variable wins over the file, but a variable you never set in the shell will be taken from
+it - so if a run spends when you expected it to refuse, check for a `.env`.
+
+**4. Diagnose one trace.** One run, one trace:
+
+    alibi diagnose path/to/trace.json
 
 ## What you can point it at
 
@@ -162,7 +201,22 @@ a `TraceSource` adapter (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 with slashes, underscores and dots turned into dashes (`/Users/me/LLM_projects/app` becomes
 `-Users-me-LLM-projects-app`). To diagnose the most recent session of the project you are in:
 
+    alibi diagnose ~/.claude/projects/-Users-me-LLM-projects-app/<session-id>.jsonl
+
+To pick the most recent session of the project you are standing in, without looking the
+name up (the substitution turns `/`, `_` and `.` into `-`, which is the same rule):
+
     alibi diagnose "$(ls -t ~/.claude/projects/"${PWD//[\/_.]/-}"/*.jsonl | head -1)"
+
+A working session is often longer than the 250,000-token ceiling, and is then refused with
+its cost rather than analysed:
+
+    Trace is 333,562 tokens, over the 250,000-token ceiling: analysing it would cost about
+    $0.03 of Jev. Raise ALIBI_MAX_TRACE_TOKENS to analyse it anyway.
+
+That is the ceiling doing its job. If the estimate is acceptable, say so explicitly:
+
+    alibi diagnose <session>.jsonl --max-trace-tokens 400000
 
 Parsing is best effort: the format is internal to Claude Code and may change. Assistant text,
 tool calls and tool results become steps; thinking blocks are skipped.
@@ -183,7 +237,7 @@ over a single time series. To sweep a directory, loop:
     1. step 74 (assistant), chapter 6, score 0.277
        '...'
 
-- **chapters** - how many 10K-token windows the trace was split into.
+- **chapters** - how many windows the trace was split into. Each is `ALIBI_JUDGE_WINDOW_TOKENS` tokens (default 10,000), so a 80K-token trace is about 10.
 - **alarm at chapter N** - where CUSUM first saw the agent's health break down. The cause is
   usually at or before it, which is why the look-back starts there. `alarm at chapter None`
   means no alarm fired and the run's ending was used as the anchor instead.
@@ -192,9 +246,14 @@ over a single time series. To sweep a directory, loop:
 
 `--json` prints the same thing as a JSON object (`gated`, `message`, `trace_tokens`,
 `n_steps`, `n_chapters`, `alarm_chapter`, `anchor`, `suspects[]`, `judge_calls`,
-`judge_seconds`, `cost_usd`) for piping into something else. Exit code is 0, or 2 if the trace
-file is missing or unreadable, or if a trace needs the judge and the Jev backend is not
-configured.
+`judge_seconds`, `cost_usd`) for piping into something else. The three cost fields are null,
+not zero, if the judge in use keeps no call log - unknown rather than free.
+
+Exit codes: **0** on success, including a gated trace. **2** if the trace file is missing or
+unreadable, the Jev backend is not configured, or a setting is rejected - 2 always means no
+judge was built, so nothing was sent and nothing was spent. **3** if the run failed once the
+judge had started reading the trace. The message says how many Jev calls completed and are
+billed; at zero, nothing is billed and the first request may never have been sent.
 
 ## The two gates, and what they cost
 

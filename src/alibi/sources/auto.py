@@ -29,9 +29,17 @@ def load_steps(path_or_id: str, source: str = "auto", project: str | None = None
             if source == "auto":
                 source = BY_SUFFIX.get(path.suffix, "json")
     if source in ("auto", "langsmith"):
+        from langsmith.utils import LangSmithError
+
         from alibi.sources.langsmith import LangSmithTraceSource
 
-        return LangSmithTraceSource(project_name=project).get_trace(path_or_id)
+        try:
+            return LangSmithTraceSource(project_name=project).get_trace(path_or_id)
+        except (LangSmithError, ValueError, TypeError, KeyError) as e:
+            # A missing key, a mistyped project or an unknown id are the ordinary mistakes
+            # here, and they arrive as LangSmith's own exception types. Without this they
+            # reach the user as a traceback from inside their SDK.
+            raise TraceFormatError(f"could not read LangSmith trace {path_or_id}: {e}") from e
     if source == "claude-code":
         from alibi.sources.claudecode import ClaudeCodeTraceSource
 

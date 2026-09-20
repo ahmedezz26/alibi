@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import traceback
 from pathlib import Path
 
 from alibi.backward import backward_pass
@@ -121,13 +122,15 @@ def main(argv: list[str] | None = None) -> int:
     dl.add_argument("--data-dir", default="data/agentrx")
 
     diag = sub.add_parser(
-        "diagnose",
-        help="V2 + Jev: the 3 steps of a long agent trace to read first",
-        allow_abbrev=False,  # --min-tokens is kept as an alias, so no prefix is ambiguous
+        "diagnose", help="V2 + Jev: the 3 steps of a long agent trace to read first"
     )
     diag.add_argument("trace", help="path to a .json / Claude Code .jsonl trace, or a LangSmith id")
     diag.add_argument("--source", choices=list(SOURCES), default="auto")
     diag.add_argument("--project", help="LangSmith project name")
+    # --min-tokens/--max-tokens are the 0.1.2 and 0.1.3 spellings, kept so existing scripts
+    # keep working. They mean the window size on `score` and `eval`, which is why the
+    # --*-trace-tokens names are the documented ones here. Having both makes "--min-t" an
+    # ambiguous prefix; argparse says so.
     diag.add_argument(
         "--min-trace-tokens",
         "--min-tokens",
@@ -195,7 +198,13 @@ def main(argv: list[str] | None = None) -> int:
 def _diagnose(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
-    from alibi.localize import JudgeUnavailable, build_judge, diagnose
+    from alibi.localize import (
+        AnalysisFailed,
+        JudgeUnavailable,
+        SettingsError,
+        build_judge,
+        diagnose,
+    )
     from alibi.sources.auto import TraceFormatError, load_steps
 
     settings = load_settings()
@@ -205,27 +214,40 @@ def _diagnose(args: argparse.Namespace) -> int:
         settings = replace(settings, max_trace_tokens=args.max_trace_tokens)
     try:
         steps = load_steps(args.trace, args.source, args.project)
-    except (FileNotFoundError, TraceFormatError, OSError) as e:
+    except (TraceFormatError, OSError) as e:  # TraceFormatError is a ValueError
         print(e, file=sys.stderr)
         return 2
 
     try:
         # The factory runs only if this trace is actually analysed, so a refusal needs no key.
-        # Only a failure to BUILD the judge is caught: a failure while judging has already
-        # cost money and must not look like a free refusal.
         d = diagnose(steps, settings=settings, judge_factory=lambda: build_judge(settings))
-    except JudgeUnavailable as e:
+    except (JudgeUnavailable, SettingsError) as e:
+        # No judge was built, so nothing was sent and nothing was spent. SettingsError is a
+        # setting the pipeline rejects before the judge exists, e.g. a zero window size; it
+        # is its own type so an internal ValueError still surfaces as the bug it is.
         print(e, file=sys.stderr)
         return 2
+    except AnalysisFailed as e:
+        # Distinct from exit 2 on purpose: the trace was already being sent, so this is not
+        # a free refusal and a script must not treat it as one. The traceback goes first so
+        # a bug in Alibi is reportable rather than indistinguishable from a Jev outage, and
+        # the cost is the last line, where a user looks.
+        traceback.print_exception(e.cause, file=sys.stderr)
+        print(e.surface_message(), file=sys.stderr)
+        return 3
     if args.json:
         print(d.model_dump_json(indent=2))
         return 0
     print(d.message)
     if not d.gated:
+        spend = (
+            f"{d.judge_calls} Jev calls, {d.judge_seconds:.0f} s, ${d.cost_usd:.4f}"
+            if d.judge_calls is not None
+            else "this judge logs no calls, so the cost is unknown"
+        )
         print(
             f"{d.trace_tokens:,} tokens, {d.n_chapters} chapters, alarm at chapter "
-            f"{d.alarm_chapter}; {d.judge_calls} Jev calls, {d.judge_seconds:.0f} s, "
-            f"${d.cost_usd:.4f}"
+            f"{d.alarm_chapter}; {spend}"
         )
         for rank, s in enumerate(d.suspects, 1):
             print(

@@ -62,3 +62,23 @@ def test_a_bad_timestamp_raises_a_format_error(tmp_path):
     p.write_text(json.dumps([{"type": "user", "timestamp": "not-a-date", "inputs": {}}]))
     with pytest.raises(TraceFormatError):
         load_steps(str(p))
+
+
+def test_a_langsmith_failure_raises_a_format_error(monkeypatch):
+    """A missing key, a mistyped project or an unknown id are the ordinary mistakes here.
+    They arrive as LangSmith's own exception types, and without this they reach the user as
+    a traceback from inside their SDK instead of a clean exit 2."""
+    from langsmith.utils import LangSmithNotFoundError
+
+    import alibi.sources.langsmith as ls
+
+    class Failing:
+        def __init__(self, project_name=None):
+            pass
+
+        def get_trace(self, trace_id):
+            raise LangSmithNotFoundError("Project my-project not found")
+
+    monkeypatch.setattr(ls, "LangSmithTraceSource", Failing)
+    with pytest.raises(TraceFormatError, match="could not read LangSmith trace"):
+        load_steps("some-trace-id", "langsmith", "my-project")

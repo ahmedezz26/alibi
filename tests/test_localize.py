@@ -1,36 +1,17 @@
 import pytest
+from fakes import FailingAfter, NearBestJudge, TypedJudge, UncountedJudge, steps
 
 from alibi.config import load_settings
-from alibi.judges.base import CallRecord
-from alibi.localize import Diagnosis, _preview, diagnose
+from alibi.localize import (
+    AnalysisFailed,
+    Diagnosis,
+    JudgeUnavailable,
+    SettingsError,
+    _preview,
+    build_judge,
+    diagnose,
+)
 from alibi.types import Step
-
-
-class TypedJudge:
-    """Health jumps at the last chapter; step 7 is the likeliest cause."""
-
-    def __init__(self):
-        self.calls = []
-
-    def evaluate(self, state, questions):
-        self.calls.append(CallRecord("fake", 0.5, None, None, 0.002))
-        out = {}
-        for q in questions:
-            if q.answer_type == "score":
-                out[q.id] = 1.0 if "[step 8]" in state else 0.0
-            elif q.answer_type == "choice":
-                first = next(iter(q.criteria))
-                out[q.id] = {"choice": first, "probabilities": {first: 1.0}, "confidence": 1.0}
-            elif q.id == "s7":
-                out[q.id] = 0.9
-            else:
-                out[q.id] = 0.1
-        return out
-
-
-def steps(n=9, chars=400):
-    kinds = ["user"] + ["assistant", "tool"] * n
-    return [Step(str(i), kinds[i], None, {"content": "x" * chars}) for i in range(n)]
 
 
 def settings(**over):
@@ -90,37 +71,6 @@ def test_long_trace_without_a_judge_is_an_error():
         diagnose(steps(), judge=None, settings=settings(min_trace_tokens=0))
 
 
-class NearBestJudge:
-    """Health jumps at chapter 3, and four steps draw enough suspicion to be ranked.
-
-    The look-back's combined scores come out as {1: 0.425, 5: 0.475, 6: 0.5, 7: 0.49}, so the
-    top-3 ``ranked`` tuple is (6, 7, 5) while ``earliest_near_best`` picks step 1 (0.425 is
-    within 80% of the top 0.5). The lead suspect is therefore absent from ``ranked``.
-    """
-
-    STEP_PROBS = {1: 0.85, 5: 0.95, 6: 1.0, 7: 0.98}
-
-    def __init__(self):
-        self.calls = []
-
-    def evaluate(self, state, questions):
-        out = {}
-        late = any(f"[step {i}]" in state for i in (7, 8))
-        for q in questions:
-            if q.answer_type == "score":  # the forward pass's health question
-                out[q.id] = 1.0 if late else 0.0
-            elif q.answer_type == "choice":
-                first = next(iter(q.criteria))
-                out[q.id] = {"choice": first, "probabilities": {first: 1.0}, "confidence": 1.0}
-            elif q.id == "cause_in_window":
-                out[q.id] = 1.0
-            elif q.id.startswith("s") and q.id[1:].isdigit():
-                out[q.id] = self.STEP_PROBS.get(int(q.id[1:]), 0.05)
-            else:  # the warning signs and the per-step checks
-                out[q.id] = 0.0
-        return out
-
-
 def test_lead_suspect_keeps_its_real_score_when_it_is_outside_the_top_three():
     """``earliest_near_best`` picks over every step, but ``Localization.ranked`` keeps only the
     top 3, so the lead suspect's score must come from the full score map, not default to 0."""
@@ -153,3 +103,138 @@ def test_a_gated_trace_never_calls_the_factory():
 def test_a_judge_and_a_factory_together_is_an_error():
     with pytest.raises(ValueError, match="not both"):
         diagnose(steps(), judge=TypedJudge(), settings=settings(), judge_factory=TypedJudge)
+
+
+def test_the_shipped_positional_call_still_works():
+    """0.1.3's ``diagnose(steps, judge, settings)`` is the documented product surface; an
+    importer that calls it positionally must not break on a patch release."""
+    d = diagnose(steps(), TypedJudge(), settings(min_trace_tokens=0))
+    assert not d.gated and d.suspects[0].step == 7
+
+
+def test_settings_default_to_the_environment(monkeypatch):
+    """Drive the gate the *other* way: this trace is ~1K tokens, so it is gated under the
+    50K default whatever happens. Only a trace that is read and then refused for being over
+    a ceiling of 1 proves the environment was consulted at all."""
+    monkeypatch.setenv("ALIBI_MIN_TRACE_TOKENS", "0")
+    monkeypatch.setenv("ALIBI_MAX_TRACE_TOKENS", "1")
+    d = diagnose(steps())
+    assert d.gated and "ceiling" in d.message
+
+
+def test_a_failure_mid_analysis_carries_what_it_cost():
+    """The surfaces promise exit 2 = nothing spent, so the count has to be real."""
+    with pytest.raises(AnalysisFailed) as caught:
+        diagnose(steps(), FailingAfter(2), settings(min_trace_tokens=0))
+    assert caught.value.completed == 2
+    assert "2 Jev call(s) completed" in caught.value.surface_message()
+    assert "connection reset" in caught.value.surface_message()
+
+
+def test_the_counts_belong_to_this_trace_not_the_judge_s_lifetime():
+    """Nothing says a host's factory must return a fresh judge, and reusing one client is
+    the natural thing to do - but `cost_usd` is a money claim about *this* trace."""
+    judge = FailingAfter(1000)  # far beyond one trace: it answers everything for now
+    first = diagnose(steps(), judge, settings(min_trace_tokens=0))
+    second = diagnose(steps(), judge, settings(min_trace_tokens=0))
+    assert second.judge_calls == first.judge_calls
+    assert second.cost_usd == pytest.approx(first.cost_usd)
+
+    judge.n = len(judge.calls) + 2  # two more answers on the third trace, then die
+    with pytest.raises(AnalysisFailed) as caught:
+        diagnose(steps(), judge, settings(min_trace_tokens=0))
+    assert caught.value.completed == 2
+
+
+def test_a_failure_before_any_call_claims_neither_spend_nor_send():
+    """The judge can also fail client-side, so 0 completed asserts nothing either way."""
+
+    class DeadOnArrival(TypedJudge):
+        def evaluate(self, state, questions):
+            raise ValueError("at least one question is required")
+
+    with pytest.raises(AnalysisFailed) as caught:
+        diagnose(steps(), DeadOnArrival(), settings(min_trace_tokens=0))
+    assert caught.value.completed == 0
+    message = caught.value.surface_message()
+    assert "nothing is billed" in message and "may already have been sent" in message
+
+
+def test_a_bad_window_size_never_reaches_the_judge():
+    """It is a settings error, free and fixable, so it must not become a spend report."""
+
+    def factory():
+        raise AssertionError("the judge is built after the trace is chunked, not before")
+
+    with pytest.raises(SettingsError, match="ALIBI_JUDGE_WINDOW_TOKENS"):
+        diagnose(
+            steps(),
+            settings=settings(min_trace_tokens=0, judge_window_tokens=0),
+            judge_factory=factory,
+        )
+
+
+def test_an_injected_judge_cannot_sidestep_the_spend_guard(monkeypatch):
+    """``make`` replaces construction, not policy: Jev is paid whoever builds the client."""
+    monkeypatch.setenv("ALIBI_JUDGE_BACKEND", "typesafe")
+    with pytest.raises(JudgeUnavailable, match="ALIBI_ALLOW_PAID_MODELS"):
+        build_judge(load_settings(), TypedJudge)
+
+
+def test_an_injected_judge_is_built_once_the_spend_is_allowed(monkeypatch):
+    monkeypatch.setenv("ALIBI_JUDGE_BACKEND", "typesafe")
+    monkeypatch.setenv("ALIBI_ALLOW_PAID_MODELS", "1")
+    assert isinstance(build_judge(load_settings(), TypedJudge), TypedJudge)
+
+
+def test_a_judge_that_logs_no_calls_reports_unknown_not_free():
+    """``Judge`` promises only ``evaluate``. A host client that does its own accounting has
+    still spent money, so the cost is null - reporting 0 would be a false claim."""
+    judge = UncountedJudge()
+    d = diagnose(steps(), judge, settings(min_trace_tokens=0))
+    assert not d.gated and d.suspects
+    assert judge.answered() > 0  # it really did call out
+    assert d.judge_calls is None and d.cost_usd is None and d.judge_seconds is None
+
+
+def test_a_failure_on_an_uncounted_judge_does_not_claim_nothing_was_billed():
+    class Uncountable(UncountedJudge):
+        def evaluate(self, state, questions):
+            super().evaluate(state, questions)
+            raise RuntimeError("Jev: connection reset")
+
+    with pytest.raises(AnalysisFailed) as caught:
+        diagnose(steps(), Uncountable(), settings(min_trace_tokens=0))
+    assert caught.value.completed is None
+    message = caught.value.surface_message()
+    assert "unknown" in message and "nothing is billed" not in message
+
+
+def test_a_window_too_small_to_group_steps_is_refused_before_the_judge():
+    """A user who writes 10 meaning 10,000 would otherwise get one chapter per step: the
+    method reads nothing in context and bills a call per step."""
+
+    def factory():
+        raise AssertionError("a degenerate window must not reach the judge")
+
+    with pytest.raises(SettingsError, match="ALIBI_JUDGE_WINDOW_TOKENS"):
+        diagnose(
+            steps(),
+            settings=settings(min_trace_tokens=0, judge_window_tokens=10),
+            judge_factory=factory,
+        )
+
+
+def test_a_workable_window_is_not_refused():
+    """The guard must not fire on the shape the method was measured with."""
+    d = diagnose(steps(), TypedJudge(), settings(min_trace_tokens=0))
+    assert not d.gated and d.n_chapters < len(steps())
+
+
+def test_a_trace_of_oversized_steps_is_still_analysed():
+    """The same shape - one step per chapter - is legitimate when the steps are the big
+    thing, not the window. Refusing those would block a real trace shape (one huge tool
+    output per step), so the guard requires a window far below the measured 10,000."""
+    big = steps(n=6, chars=60_000)  # each step alone exceeds a 10K chapter
+    d = diagnose(big, TypedJudge(), settings(min_trace_tokens=0, judge_window_tokens=10_000))
+    assert not d.gated and d.n_chapters == len(big)
